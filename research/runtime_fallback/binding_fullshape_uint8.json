@@ -1,0 +1,1024 @@
+{
+  "format": "firstlight.v4.ort-binding.v1",
+  "model": "V4 fixed-shape Android ONNX policy",
+  "external_data": "v4_general_step460_fullshape_uint8_ortfix.onnx.data",
+  "inputs": [
+    {
+      "index": 0,
+      "schema_name": "match_scalars",
+      "onnx_name": "inputs_0",
+      "dtype": "float32",
+      "shape": [
+        1,
+        18
+      ]
+    },
+    {
+      "index": 1,
+      "schema_name": "own_cards.card_vocab_id",
+      "onnx_name": "inputs_1",
+      "dtype": "int64",
+      "shape": [
+        1,
+        8
+      ]
+    },
+    {
+      "index": 2,
+      "schema_name": "own_cards.runtime_form",
+      "onnx_name": "inputs_2",
+      "dtype": "int64",
+      "shape": [
+        1,
+        8
+      ]
+    },
+    {
+      "index": 3,
+      "schema_name": "own_cards.role_bits",
+      "onnx_name": "inputs_3",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        8,
+        2
+      ]
+    },
+    {
+      "index": 4,
+      "schema_name": "own_cards.runtime_features",
+      "onnx_name": "inputs_4",
+      "dtype": "float32",
+      "shape": [
+        1,
+        8,
+        16
+      ]
+    },
+    {
+      "index": 5,
+      "schema_name": "own_cards.mask",
+      "onnx_name": "inputs_5",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        8
+      ]
+    },
+    {
+      "index": 6,
+      "schema_name": "opponent_cards.card_vocab_id",
+      "onnx_name": "inputs_6",
+      "dtype": "int64",
+      "shape": [
+        1,
+        9
+      ]
+    },
+    {
+      "index": 7,
+      "schema_name": "opponent_cards.runtime_form",
+      "onnx_name": "inputs_7",
+      "dtype": "int64",
+      "shape": [
+        1,
+        9
+      ]
+    },
+    {
+      "index": 8,
+      "schema_name": "opponent_cards.role_bits",
+      "onnx_name": "inputs_8",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        9,
+        2
+      ]
+    },
+    {
+      "index": 9,
+      "schema_name": "opponent_cards.runtime_features",
+      "onnx_name": "inputs_9",
+      "dtype": "float32",
+      "shape": [
+        1,
+        9,
+        16
+      ]
+    },
+    {
+      "index": 10,
+      "schema_name": "opponent_cards.mask",
+      "onnx_name": "inputs_10",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        9
+      ]
+    },
+    {
+      "index": 11,
+      "schema_name": "towers.tower_type",
+      "onnx_name": "inputs_11",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 12,
+      "schema_name": "towers.tower_troop_type",
+      "onnx_name": "inputs_12",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 13,
+      "schema_name": "towers.owner_type",
+      "onnx_name": "inputs_13",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 14,
+      "schema_name": "towers.features",
+      "onnx_name": "inputs_14",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        21
+      ]
+    },
+    {
+      "index": 15,
+      "schema_name": "towers.position",
+      "onnx_name": "inputs_15",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        2
+      ]
+    },
+    {
+      "index": 16,
+      "schema_name": "towers.extent",
+      "onnx_name": "inputs_16",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        4
+      ]
+    },
+    {
+      "index": 17,
+      "schema_name": "towers.mask",
+      "onnx_name": "inputs_17",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 18,
+      "schema_name": "groups.source_card_vocab_id",
+      "onnx_name": "inputs_18",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ]
+    },
+    {
+      "index": 19,
+      "schema_name": "groups.group_type",
+      "onnx_name": "inputs_19",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ]
+    },
+    {
+      "index": 20,
+      "schema_name": "groups.owner_type",
+      "onnx_name": "inputs_20",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ]
+    },
+    {
+      "index": 21,
+      "schema_name": "groups.runtime_form",
+      "onnx_name": "inputs_21",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ]
+    },
+    {
+      "index": 22,
+      "schema_name": "groups.features",
+      "onnx_name": "inputs_22",
+      "dtype": "float32",
+      "shape": [
+        1,
+        48,
+        22
+      ]
+    },
+    {
+      "index": 23,
+      "schema_name": "groups.position",
+      "onnx_name": "inputs_23",
+      "dtype": "float32",
+      "shape": [
+        1,
+        48,
+        2
+      ]
+    },
+    {
+      "index": 24,
+      "schema_name": "groups.extent",
+      "onnx_name": "inputs_24",
+      "dtype": "float32",
+      "shape": [
+        1,
+        48,
+        4
+      ]
+    },
+    {
+      "index": 25,
+      "schema_name": "groups.mask",
+      "onnx_name": "inputs_25",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        48
+      ]
+    },
+    {
+      "index": 26,
+      "schema_name": "groups.child_archetype_id",
+      "onnx_name": "inputs_26",
+      "dtype": "int64",
+      "shape": [
+        1,
+        160
+      ]
+    },
+    {
+      "index": 27,
+      "schema_name": "groups.child_group_index",
+      "onnx_name": "inputs_27",
+      "dtype": "int64",
+      "shape": [
+        1,
+        160
+      ]
+    },
+    {
+      "index": 28,
+      "schema_name": "groups.child_type",
+      "onnx_name": "inputs_28",
+      "dtype": "int64",
+      "shape": [
+        1,
+        160
+      ]
+    },
+    {
+      "index": 29,
+      "schema_name": "groups.child_features",
+      "onnx_name": "inputs_29",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160,
+        72
+      ]
+    },
+    {
+      "index": 30,
+      "schema_name": "groups.child_position",
+      "onnx_name": "inputs_30",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160,
+        2
+      ]
+    },
+    {
+      "index": 31,
+      "schema_name": "groups.child_extent",
+      "onnx_name": "inputs_31",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160,
+        4
+      ]
+    },
+    {
+      "index": 32,
+      "schema_name": "groups.child_radius",
+      "onnx_name": "inputs_32",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160
+      ]
+    },
+    {
+      "index": 33,
+      "schema_name": "groups.child_mask",
+      "onnx_name": "inputs_33",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        160
+      ]
+    },
+    {
+      "index": 34,
+      "schema_name": "active_effects.effect_vocab_id",
+      "onnx_name": "inputs_34",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 35,
+      "schema_name": "active_effects.parent_type",
+      "onnx_name": "inputs_35",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 36,
+      "schema_name": "active_effects.parent_index",
+      "onnx_name": "inputs_36",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 37,
+      "schema_name": "active_effects.source_owner_type",
+      "onnx_name": "inputs_37",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 38,
+      "schema_name": "active_effects.runtime_features",
+      "onnx_name": "inputs_38",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512,
+        7
+      ]
+    },
+    {
+      "index": 39,
+      "schema_name": "active_effects.mask",
+      "onnx_name": "inputs_39",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 40,
+      "schema_name": "events.event_type",
+      "onnx_name": "inputs_40",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 41,
+      "schema_name": "events.owner_type",
+      "onnx_name": "inputs_41",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 42,
+      "schema_name": "events.source_card_vocab_id",
+      "onnx_name": "inputs_42",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 43,
+      "schema_name": "events.source_form",
+      "onnx_name": "inputs_43",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 44,
+      "schema_name": "events.source_group_index",
+      "onnx_name": "inputs_44",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 45,
+      "schema_name": "events.target_token_index",
+      "onnx_name": "inputs_45",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 46,
+      "schema_name": "events.features",
+      "onnx_name": "inputs_46",
+      "dtype": "float32",
+      "shape": [
+        1,
+        32,
+        12
+      ]
+    },
+    {
+      "index": 47,
+      "schema_name": "events.mask",
+      "onnx_name": "inputs_47",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        32
+      ]
+    },
+    {
+      "index": 48,
+      "schema_name": "relation_edges.source",
+      "onnx_name": "inputs_48",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2048
+      ]
+    },
+    {
+      "index": 49,
+      "schema_name": "relation_edges.target",
+      "onnx_name": "inputs_49",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2048
+      ]
+    },
+    {
+      "index": 50,
+      "schema_name": "relation_edges.relation_type",
+      "onnx_name": "inputs_50",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2048
+      ]
+    },
+    {
+      "index": 51,
+      "schema_name": "relation_edges.mask",
+      "onnx_name": "inputs_51",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        2048
+      ]
+    },
+    {
+      "index": 52,
+      "schema_name": "explicit_spatial_planes",
+      "onnx_name": "inputs_52",
+      "dtype": "float32",
+      "shape": [
+        1,
+        14,
+        32,
+        18
+      ]
+    },
+    {
+      "index": 53,
+      "schema_name": "previous_action.gate",
+      "onnx_name": "inputs_53",
+      "dtype": "int64",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 54,
+      "schema_name": "previous_action.micro_action_count",
+      "onnx_name": "inputs_54",
+      "dtype": "int64",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 55,
+      "schema_name": "previous_action.variant",
+      "onnx_name": "inputs_55",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 56,
+      "schema_name": "previous_action.visible_card_vocab_id",
+      "onnx_name": "inputs_56",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 57,
+      "schema_name": "previous_action.effective_card_vocab_id",
+      "onnx_name": "inputs_57",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 58,
+      "schema_name": "previous_action.effective_form",
+      "onnx_name": "inputs_58",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 59,
+      "schema_name": "previous_action.ability_vocab_id",
+      "onnx_name": "inputs_59",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 60,
+      "schema_name": "previous_action.target_cell",
+      "onnx_name": "inputs_60",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 61,
+      "schema_name": "previous_action.delay_offset_bin",
+      "onnx_name": "inputs_61",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 62,
+      "schema_name": "previous_action.source_position",
+      "onnx_name": "inputs_62",
+      "dtype": "float32",
+      "shape": [
+        1,
+        2,
+        2
+      ]
+    },
+    {
+      "index": 63,
+      "schema_name": "previous_action.source_mask",
+      "onnx_name": "inputs_63",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 64,
+      "schema_name": "previous_action.action_mask",
+      "onnx_name": "inputs_64",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 65,
+      "schema_name": "candidates.mask",
+      "onnx_name": "inputs_65",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 66,
+      "schema_name": "candidates.elixir",
+      "onnx_name": "inputs_66",
+      "dtype": "float32",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 67,
+      "schema_name": "candidates.uid",
+      "onnx_name": "inputs_67",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 68,
+      "schema_name": "candidates.variant",
+      "onnx_name": "inputs_68",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 69,
+      "schema_name": "candidates.visible_card_vocab_id",
+      "onnx_name": "inputs_69",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 70,
+      "schema_name": "candidates.effective_card_vocab_id",
+      "onnx_name": "inputs_70",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 71,
+      "schema_name": "candidates.effective_form",
+      "onnx_name": "inputs_71",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 72,
+      "schema_name": "candidates.own_card_row",
+      "onnx_name": "inputs_72",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 73,
+      "schema_name": "candidates.source_group_index",
+      "onnx_name": "inputs_73",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 74,
+      "schema_name": "candidates.source_child_index",
+      "onnx_name": "inputs_74",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 75,
+      "schema_name": "candidates.ability_vocab_id",
+      "onnx_name": "inputs_75",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 76,
+      "schema_name": "candidates.cost",
+      "onnx_name": "inputs_76",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 77,
+      "schema_name": "candidates.runtime_features",
+      "onnx_name": "inputs_77",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        2
+      ]
+    },
+    {
+      "index": 78,
+      "schema_name": "candidates.target_mode",
+      "onnx_name": "inputs_78",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 79,
+      "schema_name": "candidates.placement",
+      "onnx_name": "inputs_79",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6,
+        32,
+        18
+      ]
+    },
+    {
+      "index": 80,
+      "schema_name": "candidates.is_building",
+      "onnx_name": "inputs_80",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 81,
+      "schema_name": "candidates.building_half_width",
+      "onnx_name": "inputs_81",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 82,
+      "schema_name": "candidates.building_half_height",
+      "onnx_name": "inputs_82",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 83,
+      "schema_name": "candidates.building_offset_x",
+      "onnx_name": "inputs_83",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 84,
+      "schema_name": "candidates.building_offset_y",
+      "onnx_name": "inputs_84",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 85,
+      "schema_name": "candidates.exclusion_group_id",
+      "onnx_name": "inputs_85",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 86,
+      "schema_name": "candidates.native_hand_slot",
+      "onnx_name": "inputs_86",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 87,
+      "schema_name": "candidates.native_source_entity",
+      "onnx_name": "inputs_87",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 88,
+      "schema_name": "candidates.native_visible_card_id",
+      "onnx_name": "inputs_88",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ]
+    },
+    {
+      "index": 89,
+      "schema_name": "hidden",
+      "onnx_name": "inputs_89",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 90,
+      "schema_name": "cell",
+      "onnx_name": "inputs_90",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 91,
+      "schema_name": "episode_start",
+      "onnx_name": "inputs_91",
+      "dtype": "uint8",
+      "shape": [
+        1
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "index": 0,
+      "schema_name": "gate",
+      "onnx_name": "argmax",
+      "dtype": "int64",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 1,
+      "schema_name": "micro_action_count",
+      "onnx_name": "add_439",
+      "dtype": "int64",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 2,
+      "schema_name": "candidate_index",
+      "onnx_name": "select_scatter_45",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 3,
+      "schema_name": "candidate_uid",
+      "onnx_name": "select_scatter_46",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 4,
+      "schema_name": "target_cell",
+      "onnx_name": "select_scatter_47",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 5,
+      "schema_name": "delay_offset_bin",
+      "onnx_name": "select_scatter_48",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 6,
+      "schema_name": "next_hidden",
+      "onnx_name": "mul_205",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 7,
+      "schema_name": "next_cell",
+      "onnx_name": "add_357",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ]
+    }
+  ]
+}

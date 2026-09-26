@@ -1,0 +1,18 @@
+FL Royale
+Copyright FL Royale contributors
+
+Includes and adapts source from FirstLight CR:
+https://github.com/Jaasssoooonnnnn/FirstLight_CR
+Copyright FirstLight CR contributors
+Licensed under the Apache License, Version 2.0.
+
+This repository contains the Android integration, native compatibility
+code and build tools. FirstLight CR supplies shared AI code and model
+checkpoints as an external dependency.
+
+Game binaries, downloaded game resources and modified APKs are not part
+of this source distribution. The Apache-2.0 license applies to the project
+source and does not grant rights to third-party game materials.
+
+FL Royale is not affiliated with or endorsed by Supercell or Null's Royale.
+Product names identify compatibility.

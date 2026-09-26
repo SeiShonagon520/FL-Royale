@@ -1,0 +1,41 @@
+{
+  "schema": "firstlight-android-ai-catalog.v1",
+  "default": "general",
+  "models": [
+    {
+      "id": "il",
+      "label": "Firstlight",
+      "description": "擅长各类卡组",
+      "source_checkpoint": "IL/checkpoint-step-00029396.pt",
+      "source_sha256": "aafeb446fde7586d8815a5fcb98b024c67236e45927f6ce05c3fd4c54522d729"
+    },
+    {
+      "id": "active_il",
+      "label": "Sunlight",
+      "description": "出牌更主动",
+      "source_checkpoint": "active IL/checkpoint-step-00000030.pt",
+      "source_sha256": "769ead4de0bb77a799ebb28d0baa44b221e9b2620a83cc6b4bc96a011b777594"
+    },
+    {
+      "id": "general",
+      "label": "Moonlight",
+      "description": "更擅长低费卡组",
+      "source_checkpoint": "General/checkpoint-step-00000460.pt",
+      "source_sha256": "2fb7a94fa5df0f12bd72433874487bc7d84a4efb2a6dac827d7adff0a5eef083"
+    },
+    {
+      "id": "hog26_proactive",
+      "label": "2.6 master 1",
+      "description": "出猪更主动",
+      "source_checkpoint": "2_6hog_expert/hog26-specialist1.pt",
+      "source_sha256": "aa4e9f7ae3bd975cf112f73744255ca36ff1ef3aadc411754ae66c11aad96628"
+    },
+    {
+      "id": "hog26_measured",
+      "label": "2.6 master 2",
+      "description": "出猪更保守",
+      "source_checkpoint": "2_6hog_expert/hog26-specialist2.pt",
+      "source_sha256": "dcd4f272f7c2277c32a6008a489d2995bf4d507a80053ac04140673d43976186"
+    }
+  ]
+}

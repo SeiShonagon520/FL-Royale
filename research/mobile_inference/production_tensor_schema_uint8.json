@@ -1,0 +1,1018 @@
+{
+  "contract": "universal-card-policy.v4 mobile export tensor ABI probe",
+  "source": "production tensorizer fixture, with fixed effect/relation capacities",
+  "uint8_masks": true,
+  "source_revision": "read source for exact contract; JSON is a generated probe",
+  "inputs": [
+    {
+      "index": 0,
+      "name": "match_scalars",
+      "dtype": "float32",
+      "shape": [
+        1,
+        18
+      ],
+      "bytes": 72
+    },
+    {
+      "index": 1,
+      "name": "own_cards.card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        8
+      ],
+      "bytes": 64
+    },
+    {
+      "index": 2,
+      "name": "own_cards.runtime_form",
+      "dtype": "int64",
+      "shape": [
+        1,
+        8
+      ],
+      "bytes": 64
+    },
+    {
+      "index": 3,
+      "name": "own_cards.role_bits",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        8,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 4,
+      "name": "own_cards.runtime_features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        8,
+        16
+      ],
+      "bytes": 512
+    },
+    {
+      "index": 5,
+      "name": "own_cards.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        8
+      ],
+      "bytes": 8
+    },
+    {
+      "index": 6,
+      "name": "opponent_cards.card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        9
+      ],
+      "bytes": 72
+    },
+    {
+      "index": 7,
+      "name": "opponent_cards.runtime_form",
+      "dtype": "int64",
+      "shape": [
+        1,
+        9
+      ],
+      "bytes": 72
+    },
+    {
+      "index": 8,
+      "name": "opponent_cards.role_bits",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        9,
+        2
+      ],
+      "bytes": 18
+    },
+    {
+      "index": 9,
+      "name": "opponent_cards.runtime_features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        9,
+        16
+      ],
+      "bytes": 576
+    },
+    {
+      "index": 10,
+      "name": "opponent_cards.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        9
+      ],
+      "bytes": 9
+    },
+    {
+      "index": 11,
+      "name": "towers.tower_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 12,
+      "name": "towers.tower_troop_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 13,
+      "name": "towers.owner_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 14,
+      "name": "towers.features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        21
+      ],
+      "bytes": 504
+    },
+    {
+      "index": 15,
+      "name": "towers.position",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        2
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 16,
+      "name": "towers.extent",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        4
+      ],
+      "bytes": 96
+    },
+    {
+      "index": 17,
+      "name": "towers.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 6
+    },
+    {
+      "index": 18,
+      "name": "groups.source_card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ],
+      "bytes": 384
+    },
+    {
+      "index": 19,
+      "name": "groups.group_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ],
+      "bytes": 384
+    },
+    {
+      "index": 20,
+      "name": "groups.owner_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ],
+      "bytes": 384
+    },
+    {
+      "index": 21,
+      "name": "groups.runtime_form",
+      "dtype": "int64",
+      "shape": [
+        1,
+        48
+      ],
+      "bytes": 384
+    },
+    {
+      "index": 22,
+      "name": "groups.features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        48,
+        22
+      ],
+      "bytes": 4224
+    },
+    {
+      "index": 23,
+      "name": "groups.position",
+      "dtype": "float32",
+      "shape": [
+        1,
+        48,
+        2
+      ],
+      "bytes": 384
+    },
+    {
+      "index": 24,
+      "name": "groups.extent",
+      "dtype": "float32",
+      "shape": [
+        1,
+        48,
+        4
+      ],
+      "bytes": 768
+    },
+    {
+      "index": 25,
+      "name": "groups.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        48
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 26,
+      "name": "groups.child_archetype_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        160
+      ],
+      "bytes": 1280
+    },
+    {
+      "index": 27,
+      "name": "groups.child_group_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        160
+      ],
+      "bytes": 1280
+    },
+    {
+      "index": 28,
+      "name": "groups.child_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        160
+      ],
+      "bytes": 1280
+    },
+    {
+      "index": 29,
+      "name": "groups.child_features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160,
+        72
+      ],
+      "bytes": 46080
+    },
+    {
+      "index": 30,
+      "name": "groups.child_position",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160,
+        2
+      ],
+      "bytes": 1280
+    },
+    {
+      "index": 31,
+      "name": "groups.child_extent",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160,
+        4
+      ],
+      "bytes": 2560
+    },
+    {
+      "index": 32,
+      "name": "groups.child_radius",
+      "dtype": "float32",
+      "shape": [
+        1,
+        160
+      ],
+      "bytes": 640
+    },
+    {
+      "index": 33,
+      "name": "groups.child_mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        160
+      ],
+      "bytes": 160
+    },
+    {
+      "index": 34,
+      "name": "active_effects.effect_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 4096
+    },
+    {
+      "index": 35,
+      "name": "active_effects.parent_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 4096
+    },
+    {
+      "index": 36,
+      "name": "active_effects.parent_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 4096
+    },
+    {
+      "index": 37,
+      "name": "active_effects.source_owner_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 4096
+    },
+    {
+      "index": 38,
+      "name": "active_effects.runtime_features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512,
+        7
+      ],
+      "bytes": 14336
+    },
+    {
+      "index": 39,
+      "name": "active_effects.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 512
+    },
+    {
+      "index": 40,
+      "name": "events.event_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 256
+    },
+    {
+      "index": 41,
+      "name": "events.owner_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 256
+    },
+    {
+      "index": 42,
+      "name": "events.source_card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 256
+    },
+    {
+      "index": 43,
+      "name": "events.source_form",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 256
+    },
+    {
+      "index": 44,
+      "name": "events.source_group_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 256
+    },
+    {
+      "index": 45,
+      "name": "events.target_token_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 256
+    },
+    {
+      "index": 46,
+      "name": "events.features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        32,
+        12
+      ],
+      "bytes": 1536
+    },
+    {
+      "index": 47,
+      "name": "events.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        32
+      ],
+      "bytes": 32
+    },
+    {
+      "index": 48,
+      "name": "relation_edges.source",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2048
+      ],
+      "bytes": 16384
+    },
+    {
+      "index": 49,
+      "name": "relation_edges.target",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2048
+      ],
+      "bytes": 16384
+    },
+    {
+      "index": 50,
+      "name": "relation_edges.relation_type",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2048
+      ],
+      "bytes": 16384
+    },
+    {
+      "index": 51,
+      "name": "relation_edges.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        2048
+      ],
+      "bytes": 2048
+    },
+    {
+      "index": 52,
+      "name": "explicit_spatial_planes",
+      "dtype": "float32",
+      "shape": [
+        1,
+        14,
+        32,
+        18
+      ],
+      "bytes": 32256
+    },
+    {
+      "index": 53,
+      "name": "previous_action.gate",
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "bytes": 8
+    },
+    {
+      "index": 54,
+      "name": "previous_action.micro_action_count",
+      "dtype": "int64",
+      "shape": [
+        1
+      ],
+      "bytes": 8
+    },
+    {
+      "index": 55,
+      "name": "previous_action.variant",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 56,
+      "name": "previous_action.visible_card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 57,
+      "name": "previous_action.effective_card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 58,
+      "name": "previous_action.effective_form",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 59,
+      "name": "previous_action.ability_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 60,
+      "name": "previous_action.target_cell",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 61,
+      "name": "previous_action.delay_offset_bin",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 62,
+      "name": "previous_action.source_position",
+      "dtype": "float32",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "bytes": 16
+    },
+    {
+      "index": 63,
+      "name": "previous_action.source_mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 2
+    },
+    {
+      "index": 64,
+      "name": "previous_action.action_mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        2
+      ],
+      "bytes": 2
+    },
+    {
+      "index": 65,
+      "name": "candidates.mask",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 6
+    },
+    {
+      "index": 66,
+      "name": "candidates.elixir",
+      "dtype": "float32",
+      "shape": [
+        1
+      ],
+      "bytes": 4
+    },
+    {
+      "index": 67,
+      "name": "candidates.uid",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 68,
+      "name": "candidates.variant",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 69,
+      "name": "candidates.visible_card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 70,
+      "name": "candidates.effective_card_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 71,
+      "name": "candidates.effective_form",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 72,
+      "name": "candidates.own_card_row",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 73,
+      "name": "candidates.source_group_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 74,
+      "name": "candidates.source_child_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 75,
+      "name": "candidates.ability_vocab_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 76,
+      "name": "candidates.cost",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 24
+    },
+    {
+      "index": 77,
+      "name": "candidates.runtime_features",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6,
+        2
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 78,
+      "name": "candidates.target_mode",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 79,
+      "name": "candidates.placement",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6,
+        32,
+        18
+      ],
+      "bytes": 3456
+    },
+    {
+      "index": 80,
+      "name": "candidates.is_building",
+      "dtype": "uint8",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 6
+    },
+    {
+      "index": 81,
+      "name": "candidates.building_half_width",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 24
+    },
+    {
+      "index": 82,
+      "name": "candidates.building_half_height",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 24
+    },
+    {
+      "index": 83,
+      "name": "candidates.building_offset_x",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 24
+    },
+    {
+      "index": 84,
+      "name": "candidates.building_offset_y",
+      "dtype": "float32",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 24
+    },
+    {
+      "index": 85,
+      "name": "candidates.exclusion_group_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 86,
+      "name": "candidates.native_hand_slot",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 87,
+      "name": "candidates.native_source_entity",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 88,
+      "name": "candidates.native_visible_card_id",
+      "dtype": "int64",
+      "shape": [
+        1,
+        6
+      ],
+      "bytes": 48
+    },
+    {
+      "index": 89,
+      "name": "hidden",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 2048
+    },
+    {
+      "index": 90,
+      "name": "cell",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ],
+      "bytes": 2048
+    },
+    {
+      "index": 91,
+      "name": "episode_start",
+      "dtype": "uint8",
+      "shape": [
+        1
+      ],
+      "bytes": 1
+    }
+  ],
+  "outputs": [
+    {
+      "index": 0,
+      "name": "gate",
+      "dtype": "int64",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 1,
+      "name": "micro_action_count",
+      "dtype": "int64",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "index": 2,
+      "name": "candidate_index",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 3,
+      "name": "candidate_uid",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 4,
+      "name": "target_cell",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 5,
+      "name": "delay_offset_bin",
+      "dtype": "int64",
+      "shape": [
+        1,
+        2
+      ]
+    },
+    {
+      "index": 6,
+      "name": "next_hidden",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ]
+    },
+    {
+      "index": 7,
+      "name": "next_cell",
+      "dtype": "float32",
+      "shape": [
+        1,
+        512
+      ]
+    }
+  ],
+  "total_input_bytes": 190150
+}

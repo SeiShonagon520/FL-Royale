@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+android {
+    namespace 'com.firstlight.localruntime'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.firstlight.localruntime'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '0.1'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    packaging { jniLibs { useLegacyPackaging true } }
+    sourceSets {
+        main {
+            java.srcDir '../../on_device/java'
+            java.srcDir '../../build/generated-java'
+        }
+    }
+}
+dependencies { implementation files('../../build/tools/onnxruntime-android-1.30.0.aar') }
+chaquopy {
+    defaultConfig {
+        version '3.12'
+        buildPython System.getenv('FL_PYTHON') ?: 'python'
+        pip { install 'numpy==1.26.2' }
+        extractPackages 'native_runner'
+    }
+    sourceSets {
+        main { srcDir '../../build/mobile-semantics' }
+    }
+}

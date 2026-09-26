@@ -1,0 +1,10 @@
+numpy==2.5.3
+orjson==3.10.16
+sc-compression==0.6.5
+zstandard==0.25.0
+torch==2.13.0
+onnx==1.23.0
+onnxruntime==1.30.0
+onnxscript==0.7.2
+Pillow>=10
+pytest>=8

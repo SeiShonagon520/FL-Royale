@@ -1,0 +1,14 @@
+* text=auto
+*.py text eol=lf
+*.java text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.inc text eol=lf
+*.S text eol=lf
+*.json text eol=lf
+*.gradle text eol=lf
+*.ps1 text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+*.png binary
+*.jar binary
