@@ -3,6 +3,7 @@
 struct LocalFrame { int tick=-1; bool terminal=false; std::string json; };
 struct LocalCommand {
   std::uint64_t generation=0;
+  int owner=1;
   int observed=-1, due=-1, hand=-1, expected_card=0, x=0, y=0, object_index=0, secondary_index=0;
   bool ability=false, complete=false;
   std::atomic<bool> cancelled{false};
@@ -21,9 +22,16 @@ std::atomic<int> g_local_terminal_tick{-1};
 bool g_local_result_shown=false;
 jclass g_local_runtime_class=nullptr;
 jmethodID g_local_prepare_match=nullptr, g_local_battle_created=nullptr, g_local_show_result=nullptr;
+jmethodID g_local_home_status=nullptr;
 void* g_local_native_manager=nullptr;
 int g_local_last_capture=-1;
 LocalEventDelta g_local_event_delta;
+// Set when the fixture being started is a single-sided PvE arena, so the next
+// step relocates the enemy half's towers off-screen exactly once. Armed by
+// `process_local_scene_requests` from the fixture's own marker rather than from
+// the game mode id, so a mode that is not this PvE can never have its arena
+// silently rewritten.
+std::atomic<bool> g_pve_towerless_pending{false};
 
 void local_bad_connection_show(void* root) {
   if(g_local_boot_ready.load(std::memory_order_acquire)) return;
@@ -63,7 +71,7 @@ void process_local_commands(void* manager, int tick) {
         request->observed>=0 && request->observed<=tick && tick-request->observed<=40 && due<=tick+40;
     if(ok && !request->ability) {
       DeployRequest deploy;
-      ok=resolve_hand_deploy_request(manager,1,request->hand,request->x,request->y,&deploy) &&
+      ok=resolve_hand_deploy_request(manager,request->owner,request->hand,request->x,request->y,&deploy) &&
          deploy.root_card_id==request->expected_card &&
          format_deploy_command(deploy,due-static_cast<int>(kLiveCommandAgeTicks)-1,command,sizeof(command)) &&
          inject_logic_command(manager,command);
@@ -74,7 +82,7 @@ void process_local_commands(void* manager, int tick) {
           combat_card_form_label(deploy.form_code));
     } else if(ok) {
       AbilityRequest ability;
-      ok=resolve_ready_ability_request(manager,1,request->object_index,request->secondary_index,&ability) &&
+      ok=resolve_ready_ability_request(manager,request->owner,request->object_index,request->secondary_index,&ability) &&
          format_ability_command(ability,due-2,command,sizeof(command)) && inject_logic_command(manager,command);
       if(ok) std::snprintf(receipt,sizeof(receipt),"{\"ok\":true,\"async\":true,\"executeTick\":%d,\"queuedTick\":%d}",due,tick);
     }
@@ -92,6 +100,21 @@ void local_runtime_before_step(void* manager) {
   // read, but do not continue filling the queue during the result animation.
   if(g_local_result_shown) return;
   const int tick=g_game_state_tick(manager);
+  // Single-sided PvE arena: move the enemy half's royal towers past the far edge
+  // so the player sees none of them. Armed by the fixture and attempted once per
+  // step until it succeeds. It cannot be a plain one-shot: the engine builds the
+  // towers during scene setup, so on the first step after the scene starts there
+  // are no tower objects at all, the relocation finds nothing, and a
+  // once-and-done flag would have spent itself before the towers existed. The
+  // device evidence for that is the missing "pve towerless relocated" line on a
+  // run where the screenshot still showed the enemy half empty of *units* but the
+  // towers had never been touched.
+  if(g_pve_towerless_pending.load(std::memory_order_acquire)) {
+    void* const live_world=read_object_field<void*>(manager,0xa8);
+    relocate_enemy_towers_offscreen(live_world);
+    if(!pve_towerless_towers_pending(live_world))
+      g_pve_towerless_pending.store(false,std::memory_order_release);
+  }
   process_local_commands(manager,tick);
   BattleResultView result;
   bool terminal=read_battle_result(read_object_field<void*>(manager,0xa8),&result) && result.finalized;

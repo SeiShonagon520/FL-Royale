@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys
 
 from build_config import load
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,8 @@ while pending:
             pending.append(node.module)
     staged = text.replace("import torch\n", "import firstlight_numpy as torch\n").replace(
         "from torch import Tensor", "from firstlight_numpy import Tensor")
+    if module == "native_runner.training.v4.factory":
+        staged = staged.replace("reject_unknown_public_semantics=True", "reject_unknown_public_semantics=False")
     destination = TARGET / relative
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(staged, encoding="utf-8")
@@ -60,7 +63,21 @@ while pending:
                      "numpy_backend": staged != text})
 shutil.copytree(SOURCE / "native_runner/data/competitive", TARGET / "native_runner/data/competitive", dirs_exist_ok=True)
 shutil.copyfile(SOURCE / "native_runner/data/native_match.json", TARGET / "native_runner/data/native_match.json")
+# Copying alone would leave a retired module in the staged tree forever, and it
+# would be packaged: pve_levels.py survived its own deletion in the source tree
+# because nothing here ever removed the stale copy. Prune any top-level module
+# that no longer has a source before copying, so the staged tree -- and the
+# source_manifest, which is built from what was copied -- describe reality.
+sources = {source.name for source in (ROOT / "on_device/python").glob("*.py")}
+for orphan in TARGET.glob("*.py"):
+    if orphan.name not in sources:
+        orphan.unlink()
 for source in (ROOT / "on_device/python").glob("*.py"):
     shutil.copyfile(source, TARGET / source.name)
 (TARGET / "source_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+import subprocess
+build = ROOT / "build"
+build.mkdir(exist_ok=True)
+subprocess.run([sys.executable, "-B", str(ROOT / "tools/patch_mode_pacing.py"), "--staged", str(TARGET), "--receipt", str(build / "mode_pacing.json")], check=True)
+subprocess.run([sys.executable, "-B", str(ROOT / "tools/patch_pve_timeline.py"), "--staged", str(TARGET), "--receipt", str(build / "pve_timeline.json")], check=True)
 print(json.dumps({"modules": len(manifest), "backend_modules": sum(row["numpy_backend"] for row in manifest)}))

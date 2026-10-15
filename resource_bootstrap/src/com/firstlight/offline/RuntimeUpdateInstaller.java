@@ -60,13 +60,20 @@ public final class RuntimeUpdateInstaller {
                 throw new IOException("Could not restore previous runtime update");
             }
             if (verifyDirectory(update, manifest)) {
+                if (backup.exists()) {
+                    deleteTree(backup, dataDir);
+                }
                 return "reused";
             }
             if (update.exists() && !hasOwnMarker(update, manifest) && !compatiblePartialUpdate(update, manifest)) {
                 throw new IOException("Existing game update differs; preserving it unchanged");
             }
             if (backup.exists()) {
-                throw new IOException("A previous update backup needs inspection");
+                if (hasOwnMarker(backup, manifest) || (update.exists() && hasOwnMarker(update, manifest))) {
+                    deleteTree(backup, dataDir);
+                } else {
+                    throw new IOException("A previous update backup needs inspection");
+                }
             }
             long available = new StatFs(dataDir.getAbsolutePath()).getAvailableBytes();
             long required = manifest.uncompressedBytes + FREE_SPACE_RESERVE;
@@ -78,6 +85,8 @@ public final class RuntimeUpdateInstaller {
             if (!staging.mkdir()) {
                 throw new IOException("Could not create staging directory");
             }
+            staging.setReadable(true, false);
+            staging.setExecutable(true, false);
             boolean promoted = false;
             try {
                 // A second independent read verifies the whole ZIP byte stream,
@@ -102,6 +111,8 @@ public final class RuntimeUpdateInstaller {
                     }
                     throw new IOException("Could not promote staged update");
                 }
+                update.setReadable(true, false);
+                update.setExecutable(true, false);
                 promoted = true;
                 if (backup.exists()) {
                     deleteTree(backup, dataDir);
@@ -185,6 +196,8 @@ public final class RuntimeUpdateInstaller {
                 if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
                     throw new IOException("Could not create update directory: " + parent);
                 }
+                parent.setReadable(true, false);
+                parent.setExecutable(true, false);
                 MessageDigest digest = newDigest();
                 try (FileOutputStream raw = new FileOutputStream(output);
                      BufferedOutputStream file = new BufferedOutputStream(raw, BUFFER_BYTES)) {
@@ -200,6 +213,7 @@ public final class RuntimeUpdateInstaller {
                     file.flush();
                     raw.getFD().sync();
                 }
+                output.setReadable(true, false);
                 try {
                     if (!hex(digest.digest()).equals(manifest.files.getString(name))) {
                         throw new IOException("Digest differs for update file: " + name);

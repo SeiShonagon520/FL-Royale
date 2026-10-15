@@ -172,6 +172,9 @@ bool exercise_commands(void* manager) {
 } // namespace clone_adapter
 
 #if defined(FIRSTLIGHT_LOCAL_APP)
+// Included before the local bridge because `local_runtime_before_step` is what
+// calls the relocation, and the bridge needs the definitions to be in scope.
+#include "pve_towerless.inc"
 #include "local_runtime_bridge.inc"
 #endif
 #include "cold_player_scene.inc"
@@ -188,11 +191,25 @@ void run_cold_clone_on_frame() {
   sample_cold_player_scene();
 #if defined(FIRSTLIGHT_LOCAL_APP)
   process_local_scene_requests();
-  if (admitted || !g_local_boot_ready.load(std::memory_order_acquire) || !inspect_content_runtime()) return;
+  if (admitted || !g_local_boot_ready.load(std::memory_order_acquire)) return;
+  if (!inspect_content_runtime()) {
+    static std::uint32_t s_content_wait_frames = 0;
+    if (++s_content_wait_frames % 180 == 0) {
+      LOGI("waiting for content runtime post_process_ready... frames=%u", s_content_wait_frames);
+    }
+    if (s_content_wait_frames > 900) {
+      static bool s_timeout_reported = false;
+      if (!s_timeout_reported) {
+        s_timeout_reported = true;
+        LOGE("content runtime initialization timed out (>900 frames)");
+        publish_cold_home_status(kColdHomeProfileUnreadable);
+      }
+    }
+    return;
+  }
 #else
   if (admitted || access(kRequest, R_OK) != 0 || !inspect_content_runtime()) return;
 #endif
-  admitted = true;
 #if !defined(FIRSTLIGHT_LOCAL_APP)
   char* request_text = nullptr;
   std::size_t bytes = 0;
@@ -207,28 +224,55 @@ void run_cold_clone_on_frame() {
   std::sscanf(request_text, "%d %d", &steps, &phase);
   std::free(request_text);
   unlink(kRequest);
+  // The request file is a one-shot signal: latch now that it is consumed.
+  admitted = true;
   if (steps < 0 || steps > 20 || !read_text_file(kFixture, &fixture, &bytes) || bytes >= kMaxReplayConfigBytes) {
     std::free(fixture); LOGE("cold-clone invalid request"); return;
   }
 #endif
+#if defined(FIRSTLIGHT_LOCAL_APP)
+  resources_verified = true;
+#else
   RunnerAttestationSnapshot attestation;
   resources_verified = collect_runner_attestation(&attestation) && attestation.content_ready &&
       attestation.content_assets_mapped &&
       std::strcmp(attestation.libg_sha256, "110aa2b5cac391c498645e072b0d88729428c2c2845e7e2737ca8ee979059783") == 0 &&
       std::strcmp(attestation.content_fingerprint_sha256, "e0cb2fb9eb2fdd0df1afcb00df3e3ba61cf25aa8b24e39c17cc391d952a4e339") == 0 &&
       std::strcmp(attestation.content_assets_sha256, "4b99bfd5d5fb52fe79bba74cd1990ce08fc4f46064d905c64cb5c281b6474e7b") == 0;
+#endif
   owner_tid = syscall(__NR_gettid);
   deadline_ns = process_monotonic_now_ns() + 15000000000LL;
   std::int32_t location = 0;
   void* context_a = g_game_state_context_a();
   void* context_b = g_game_state_context_b();
   LOGI("cold-clone admission resources=%d isolated=%d steps=%d", resources_verified, isolated(), steps);
+#if !defined(FIRSTLIGHT_LOCAL_APP)
   if (!isolated() || !extract_location_id(fixture, &location) || !validate_empty_match_streams(fixture) ||
       !prewarm_location_tilemap(context_a, location)) { std::free(fixture); return; }
+#else
+  // For the local offline application, isolation is not required and would fail on slow/production boot.
+  if (!extract_location_id(fixture, &location) || !validate_empty_match_streams(fixture) ||
+      !prewarm_location_tilemap(context_a, location)) {
+    static std::uint32_t s_prewarm_fail_count = 0;
+    if (++s_prewarm_fail_count % 60 == 1) {
+      LOGE("local-app admission preconditions failed: extract=%d streams=%d prewarm=%d location=%d",
+           extract_location_id(fixture, &location), validate_empty_match_streams(fixture),
+           prewarm_location_tilemap(context_a, location), location);
+    }
+    std::free(fixture);
+    return;
+  }
+#endif
   void* parsed = parse_json_text(fixture);
   std::free(fixture);
 #if defined(FIRSTLIGHT_LOCAL_APP)
-  LOGI("local-app offline Home bootstrap result=%d", start_cold_home_scene(parsed,context_a,context_b));
+  // Latch only after the Home scene actually started. Every precondition above
+  // can still fail on a later frame (tilemap prewarm, isolation, content
+  // readiness), and latching earlier would permanently lock out the retry and
+  // strand the stock loading screen.
+  const std::int32_t home_result = start_cold_home_scene(parsed,context_a,context_b);
+  admitted = home_result != 0;
+  LOGI("local-app offline Home bootstrap result=%d admitted=%d", home_result, admitted);
   release_json_object(parsed);
   return;
 #endif
@@ -265,6 +309,12 @@ void cold_clone_owner_update(void* singleton, float seconds) {
   // No server clock needs to catch up while this offline app is backgrounded.
   if(g_local_boot_ready.load(std::memory_order_acquire) && !g_local_foreground.load(std::memory_order_acquire)) seconds=0.0f;
   if(g_local_running.load(std::memory_order_acquire) && g_local_native_manager && !g_local_result_shown) {
+    // The local app advances the world through the hooked owner update, not
+    // through game_state_step_hook, so the engine's per-tick consumers have to
+    // be driven from here as well. Without this a scheduled action is queued and
+    // accepted, then never executed: the local app's waves registered fine and
+    // no monster ever appeared.
+    process_scheduled_replay_actions(g_local_native_manager);
     // Keep every five-tick FAIR/LSTM step even on slower devices. Rendering
     // stays live while the offline clock waits for its bounded consumer.
     // Service the action mailbox before waiting: an AI may be awaiting its

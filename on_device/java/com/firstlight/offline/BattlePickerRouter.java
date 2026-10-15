@@ -93,14 +93,59 @@ public final class BattlePickerRouter {
                 cancel(requestId);
                 return;
             }
-            AiOpponentPicker.showForBattle(activity, catalog, available,
-                    id -> preload(activity, catalog, requestId, id),
-                    () -> cancel(requestId));
+            // Mode first, then opponent. GameModePicker was a fully built but
+            // never-called class, so the mode a player picks -- including all
+            // three PvE schedules -- was unreachable no matter what it listed.
+            // It has to sit in front of the AI list here, in the one place the
+            // lobby opens a chooser, or the modes are dead code.
+            // A scripted mode has no opponent to pick: its waves come from the schedule,
+            // so the opponent list would be asking the player to choose something
+            // the match never uses. Start the battle with the model that is
+            // already loaded, which is the policy that plays the player's side.
+            GameModePicker.show(activity, () -> {
+                if (GameModePicker.isScripted(GameModePicker.selectedMode(activity).id)) {
+                    // A roguelike climb is the one mode with a genuine solo/team
+                    // choice, so the ally toggle is asked here -- after the mode is
+                    // known to be a climb, and before the model is loaded, so the
+                    // answer is already in the deck payload by the time the match
+                    // is built. Cancelling this dialog aborts the whole request
+                    // rather than silently starting a solo run the player did not
+                    // ask for.
+                    GameModePicker.askAiAlly(activity, ally -> {
+                        String id = selectedModelId(activity, catalog);
+                        if (id != null) {
+                            preload(activity, catalog, requestId, id);
+                        } else {
+                            Toast.makeText(activity, "没有可用的本地模型，无法开始单人挑战",
+                                    Toast.LENGTH_SHORT).show();
+                            cancel(requestId);
+                        }
+                    });
+                    return;
+                }
+                AiOpponentPicker.showForBattleWithDuel(activity, catalog, available,
+                        id -> preload(activity, catalog, requestId, id),
+                        (seat0, seat1) -> prepareDuel(activity, catalog, requestId, seat0, seat1),
+                        () -> cancel(requestId));
+            }, () -> cancel(requestId));
         } catch (Exception failure) {
             Log.e(TAG, "Could not show opponent picker", failure);
             Toast.makeText(activity, "无法打开 AI 选择", Toast.LENGTH_SHORT).show();
             cancel(requestId);
         }
+    }
+
+    /**
+     * The model a scripted mode should run under.
+     *
+     * A wave-driven mode still needs a policy to play the player's own side, so
+     * it reuses whatever the player last chose rather than asking again. The
+     * catalogue default is the fallback, and null only when the catalogue itself
+     * is empty.
+     */
+    private static String selectedModelId(Activity activity, AiOpponentPicker.Catalog catalog) {
+        String saved = AiOpponentPicker.selectedId(activity, catalog);
+        return saved != null ? saved : catalog.defaultId;
     }
 
     private static Set<String> availableModels(AssetManager assets, AiOpponentPicker.Catalog catalog) {
@@ -178,6 +223,102 @@ public final class BattlePickerRouter {
             showFailureAndCancel(activity, requestId);
         }
     }
+
+    /**
+     * Duel handoff. Both models are opened through the duel registry (the
+     * bootstrap holds a single slot), then the scene starts exactly like a
+     * normal battle.
+     */
+    private static void prepareDuel(Activity activity, AiOpponentPicker.Catalog catalog,
+                                    long requestId, String seat0, String seat1) {
+        if (pendingRequest.get() != requestId) return;
+        try {
+            preloadWaiter.execute(() -> {
+                try {
+                    for (String aiId : new String[] {seat0, seat1}) {
+                        DuelPolicyRegistry.prepare(activity, aiId,
+                                PolicyModelCatalog.forId(aiId)).get(MODEL_WAIT_SECONDS, TimeUnit.SECONDS);
+                    }
+                    if (pendingRequest.get() != requestId) {
+                        DuelPolicyRegistry.closeAll();
+                        return;
+                    }
+                    activity.runOnUiThread(() -> finishDuelReady(activity, requestId, seat0));
+                } catch (InterruptedException failure) {
+                    Thread.currentThread().interrupt();
+                    DuelPolicyRegistry.closeAll();
+                    showDuelFailureAndFallback(activity, catalog, requestId);
+                } catch (Exception failure) {
+                    Log.e(TAG, "Duel models are not ready", failure);
+                    DuelPolicyRegistry.closeAll();
+                    showDuelFailureAndFallback(activity, catalog, requestId);
+                }
+            });
+        } catch (RuntimeException failure) {
+            Log.e(TAG, "Could not queue duel model wait", failure);
+            DuelPolicyRegistry.closeAll();
+            showDuelFailureAndFallback(activity, catalog, requestId);
+        }
+    }
+
+    /**
+     * The native bridge drops a ready request whose aiId is not one of the five
+     * catalog models or whose generation is not positive
+     * ({@code battle_picker_bridge.cpp}). Passing anything else left the native
+     * Battle button stuck for the whole process, so the seat-0 model id and a
+     * registry generation are used here. The duel pipeline reads both seats from
+     * the fixture, so neither value changes what is actually played.
+     */
+    private static void finishDuelReady(Activity activity, long requestId, String seat0) {
+        if (pendingRequest.get() != requestId) return;
+        if (!isUsable(activity) || activity != currentGameActivity()) {
+            DuelPolicyRegistry.closeAll();
+            cancel(requestId);
+            return;
+        }
+        try {
+            long generation = DuelPolicyRegistry.nextGeneration();
+            if (seat0 == null || seat0.isEmpty() || generation <= 0) {
+                throw new IllegalStateException("Duel handoff token is invalid");
+            }
+            // The native bridge only records the mailbox entry; libg scene setup
+            // runs later on its own game thread and calls back into
+            // prepareMatch. Flag that callback as a duel before handing off.
+            LocalBattleRuntime.beginDuel();
+            nativeOnBattleReady(requestId, seat0, generation);
+            pendingRequest.compareAndSet(requestId, 0);
+        } catch (UnsatisfiedLinkError failure) {
+            Log.e(TAG, "Native battle callback is missing", failure);
+            DuelPolicyRegistry.closeAll();
+            showFailureAndCancel(activity, requestId);
+        } catch (RuntimeException failure) {
+            Log.e(TAG, "Duel handoff rejected", failure);
+            DuelPolicyRegistry.closeAll();
+            showFailureAndCancel(activity, requestId);
+        }
+    }
+
+    /**
+     * A duel failure must never strand the player: release the native request
+     * and notify the player so a fresh battle can be started cleanly.
+     */
+    private static void showDuelFailureAndFallback(Activity activity,
+                                                   AiOpponentPicker.Catalog catalog,
+                                                   long requestId) {
+        if (!isUsable(activity)) {
+            cancel(requestId);
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            if (pendingRequest.get() == requestId && isUsable(activity)) {
+                Toast.makeText(activity, "AI 自战模型加载失败，请重试", Toast.LENGTH_SHORT).show();
+            }
+            cancel(requestId);
+            // Cancel releases native request. Avoid requestFromNative with forged id.
+        });
+    }
+
+    /** Ask native for a fresh battle request */
 
     private static void showFailureAndCancel(Activity activity, long requestId) {
         if (isUsable(activity)) {

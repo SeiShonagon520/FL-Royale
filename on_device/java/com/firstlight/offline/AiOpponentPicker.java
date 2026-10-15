@@ -145,6 +145,114 @@ public final class AiOpponentPicker {
         showInternal(activity, catalog, availableIds, listener, onCancelled, false);
     }
 
+    /**
+     * Battle picker with an extra "AI 自战（观战）" row above the model list.
+     *
+     * <p>AI-vs-AI is a way to pick an opponent, not a game mode: putting it here
+     * keeps the whole flow at one tap and leaves the normal ladder/duel flow
+     * byte-for-byte unchanged. Picking the duel row hands control to
+     * {@link AiDuelSetup}; the dialog is rebuilt if the player backs out, so
+     * there is no dead end.</p>
+     */
+    public static void showForBattleWithDuel(Activity activity, Catalog catalog, Set<String> availableIds,
+                                              SelectionListener listener,
+                                              AiDuelSetup.OnStart onDuelStart, Runnable onCancelled) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            if (onCancelled != null) onCancelled.run();
+            return;
+        }
+        final GameModePicker.Mode currentMode = GameModePicker.selectedMode(activity);
+        // Row 0 is the AI duel, row 1 is the current game mode, then the models.
+        // The mode used to live only in a neutral button, which is easy to miss.
+        final int duelRow = 0, modeRow = 1, modelBase = 2;
+        final String[] labels = new String[catalog.choices.size() + modelBase];
+        labels[duelRow] = "🤖 AI 自战（观战）";
+        labels[modeRow] = "🎮 玩法：" + currentMode.label;
+        for (int i = 0; i < catalog.choices.size(); i++) {
+            Choice choice = catalog.choices.get(i);
+            labels[modelBase + i] = choice.label + (availableIds.contains(choice.id) ? "" : "（未安装）");
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(activity,
+                android.R.layout.simple_list_item_2, android.R.id.text1, labels) {
+            @Override public boolean isEnabled(int position) {
+                if (position < modelBase) return true;
+                return availableIds.contains(catalog.choices.get(position - modelBase).id);
+            }
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                android.widget.TextView title = view.findViewById(android.R.id.text1);
+                android.widget.TextView subtitle = view.findViewById(android.R.id.text2);
+                int color = 0xff161616;
+                if (position < modelBase) color = 0xff0066cc;
+                if (title != null) {
+                    title.setText(labels[position]);
+                    title.setTextColor(color);
+                    title.setTextSize(16);
+                }
+                if (subtitle != null) {
+                    String text;
+                    if (position == duelRow) {
+                        text = "两个 AI 互相攻击，可选不同模型或同一模型自博弈";
+                    } else if (position == modeRow) {
+                        text = "【" + currentMode.category + "】" + currentMode.description
+                                + (currentMode.policyNote != null ? "  ✓ 已验证" : "");
+                    } else {
+                        text = catalog.choices.get(position - modelBase).description;
+                    }
+                    subtitle.setText(text);
+                    subtitle.setTextColor(0xff666666);
+                    subtitle.setTextSize(13);
+                }
+                view.setAlpha(isEnabled(position) ? 1.0f : 0.45f);
+                return view;
+            }
+        };
+        // Set by any path that hands control elsewhere (model load or the duel
+        // screen) so the resulting dismissal is not treated as a cancellation.
+        final java.util.concurrent.atomic.AtomicBoolean suppressCancel =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        final AlertDialog dialog = new AlertDialog.Builder(activity,
+                android.R.style.Theme_Material_Light_Dialog_Alert)
+                .setTitle("选择对战方式")
+                .setAdapter(adapter, (d, which) -> {
+                    if (which == duelRow) {
+                        // The duel screen owns its own dismissal; reopening this
+                        // list is its "返回" action.
+                        suppressCancel.set(true);
+                        d.dismiss();
+                        AiDuelSetup.show(activity, onDuelStart,
+                                () -> showForBattleWithDuel(activity, catalog, availableIds,
+                                        listener, onDuelStart, onCancelled));
+                        return;
+                    }
+                    if (which == modeRow) {
+                        // Swap the list in place: picking a mode returns to this
+                        // same screen with the new mode shown, so the player
+                        // never has to hunt for a hidden button.
+                        suppressCancel.set(true);
+                        d.dismiss();
+                        GameModePicker.show(activity,
+                                () -> showForBattleWithDuel(activity, catalog, availableIds,
+                                        listener, onDuelStart, onCancelled));
+                        return;
+                    }
+                    Choice choice = catalog.choices.get(which - modelBase);
+                    if (!availableIds.contains(choice.id)) return;
+                    suppressCancel.set(true);
+                    listener.onSelected(choice.id);
+                })
+                .setNegativeButton("取消", null)
+                .create();
+        if (onCancelled != null) {
+            // Fires for 取消, the back key and a tap outside.
+            dialog.setOnDismissListener(d -> {
+                if (suppressCancel.getAndSet(false)) return;
+                onCancelled.run();
+            });
+        }
+        dialog.show();
+    }
+
     private static void showInternal(Activity activity, Catalog catalog, Set<String> availableIds,
                                      SelectionListener listener, Runnable onCancelled,
                                      boolean rememberImmediately) {
@@ -182,8 +290,9 @@ public final class AiOpponentPicker {
             }
         };
         final boolean[] chosen = {false};
+        GameModePicker.Mode currentMode = GameModePicker.selectedMode(activity);
         AlertDialog dialog = new AlertDialog.Builder(activity, android.R.style.Theme_Material_Light_Dialog_Alert)
-                .setTitle("选择对战 AI")
+                .setTitle("选择对战 AI  [" + currentMode.label + "]")
                 .setAdapter(adapter, (ignored, which) -> {
                     Choice choice = catalog.choices.get(which);
                     if (!availableIds.contains(choice.id)) {
@@ -195,6 +304,12 @@ public final class AiOpponentPicker {
                     }
                     chosen[0] = true;
                     listener.onSelected(choice.id);
+                })
+                .setNeutralButton("玩法: " + currentMode.label + " (切换)", (d, which) -> {
+                    chosen[0] = true;
+                    GameModePicker.show(activity, () -> {
+                        showInternal(activity, catalog, availableIds, listener, onCancelled, rememberImmediately);
+                    });
                 })
                 .setNegativeButton("取消", null)
                 .create();

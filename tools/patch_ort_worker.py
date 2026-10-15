@@ -108,14 +108,18 @@ def patch(decoded: pathlib.Path, smoke_decoded: pathlib.Path) -> dict[str, objec
     bridge_classes = sorted(bridge_source.glob("GameOrtBootstrap*.smali"))
     picker_classes = sorted(picker_source.glob("AiOpponentPicker*.smali"))
     deck_classes = sorted(picker_source.glob("AiDeckSettings*.smali"))
+    mode_classes = sorted(picker_source.glob("GameModePicker*.smali"))
+    coordinator_classes = sorted(picker_source.glob("OfflineBattleCoordinator*.smali"))
     router_classes = sorted(router_source.glob("BattlePickerRouter*.smali"))
     catalog_classes = sorted(catalog_source.glob("PolicyModelCatalog*.smali"))
     recurrent_classes = sorted(recurrent_source.glob("RecurrentPolicySession*.smali"))
     loopback_classes = sorted(loopback_source.glob("LoopbackProbeSession*.smali"))
+    offline_classes = sorted(
+        path for path in picker_source.glob("*.smali")
+        if not path.name.startswith("LocalBattleRuntime")
+    )
     target_smali = decoded / "smali"
-    sources = (*ort_classes, *worker_classes, *bridge_classes, *picker_classes, *deck_classes,
-               *router_classes,
-               *catalog_classes, *recurrent_classes, *loopback_classes)
+    sources = (*ort_classes, *offline_classes)
     for source in sources:
         package = "ai/onnxruntime" if source.parent == ort_source else "com/firstlight/offline"
         if any((smali_dir / package / source.name).exists() for smali_dir in decoded.glob("smali*")):

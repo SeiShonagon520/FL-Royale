@@ -528,6 +528,12 @@ struct ScheduledReplayAction {
   std::uint32_t card_id = 0;
   std::int32_t position_x = 0;
   std::int32_t position_y = 0;
+  // The character level the deployed unit is built at, 1..15. Zero means "the
+  // deck's own level", which is what every non-PvE caller wants. A PvE wave
+  // table states a level per spawn because the monsters climb from level 1 to
+  // level 15 across a run; without this field the wave table's level column
+  // would be decoration and every wave would field level-11 units.
+  std::int32_t level = 0;
   std::uint32_t resolved_command_card_id = 0;
   std::uint32_t resolved_card_parameter = 0;
   char ability_hints[kMaxScheduledAbilityHints + 1] = {};
@@ -755,11 +761,17 @@ constexpr std::int32_t kMaxRichObservedObjects = kMaxObservedObjects;
 constexpr std::int32_t kMaxObjectComponents = 64;
 constexpr std::int32_t kMaxActiveEffects = 64;
 constexpr std::int32_t kMaxAttackSequenceStage = 255;
-constexpr std::int32_t kPlayerCount = 2;
+constexpr std::int32_t kPlayerCount = 4;
 constexpr std::int32_t kMaxDeckCards = 32;
 constexpr std::int32_t kMaxHandCards = 16;
 constexpr std::int32_t kMaxCycleCards = 32;
 constexpr std::uint32_t kLiveCommandAgeTicks = 20;
+// The character level range a scheduled PvE deploy may request. A wave table's
+// monsters climb from level 1 to level 15 across a run, and 15 is the shipped
+// card cap (`local_card_catalog` builds every local card at 11 out of 16), so
+// anything outside 1..15 is a table bug rather than a request worth honouring.
+constexpr std::int32_t kPvECharacterLevelMin = 1;
+constexpr std::int32_t kPvECharacterLevelMax = 15;
 constexpr std::size_t kMaxTransitionActions = 8;
 constexpr std::size_t kMaxStoredSnapshots = 64;
 constexpr std::size_t kMaxStoredTowerTroopRuntimes = 6;
@@ -859,6 +871,19 @@ bool install_inline_hook(std::uintptr_t libg_base, std::uintptr_t offset, const 
                          const void *replacement, void **original, const char *label);
 bool process_pending_native_command(void *manager);
 void process_scheduled_replay_actions(void *manager);
+bool enqueue_local_scheduled_card(std::int32_t owner, std::uint32_t card_id, std::int32_t position_x,
+                                  std::int32_t position_y, std::int32_t target_execute_tick, char *response,
+                                  std::size_t response_size);
+bool local_app_live_manager_matches(void *manager);
+// Defined in local_runtime_bridge.inc, which is included after this point. The
+// local app's battle identity is needed here, so name the two globals the
+// enqueue and consume paths share.
+#if defined(FIRSTLIGHT_LOCAL_APP)
+extern void *g_local_native_manager;
+extern std::uint64_t g_local_generation;
+extern std::atomic<bool> g_local_running;
+extern std::atomic<bool> g_local_boot_ready;
+#endif
 bool format_probe_native_touch_status(char *response, std::size_t response_size);
 void run_control_server(std::uint16_t port);
 
@@ -2340,7 +2365,13 @@ bool format_native_entity_key_json(char *destination, std::size_t destination_si
 }
 
 bool suppress_offline_connection_error_if_needed() {
-  if (!g_offline_control_session_active.load(std::memory_order_acquire) || g_libg_base == 0) {
+#if defined(FIRSTLIGHT_LOCAL_APP)
+  const bool offline_active = g_offline_control_session_active.load(std::memory_order_acquire) ||
+                              g_local_boot_ready.load(std::memory_order_acquire);
+#else
+  const bool offline_active = g_offline_control_session_active.load(std::memory_order_acquire);
+#endif
+  if (!offline_active || g_libg_base == 0) {
     return false;
   }
   const auto game_app_getter = reinterpret_cast<NoArgPointer>(g_libg_base + kGameAppGetterOffset);
@@ -2552,6 +2583,40 @@ struct BattleResultView {
 
 bool read_hitpoints(const void *object, std::int32_t *hitpoints, std::int32_t *maximum_hitpoints);
 
+// Tower identity is read from the object itself, never from its position.
+// LogicGameObject+0x48 is the LogicData the object was built from, and
+// LogicData+0x40 is the data global id. assets/csv_logic/global_ids.csv
+// resolves the two crown towers to distinct character ids:
+//
+//     35000000  KingTower
+//     35000001  PrincessTower
+//
+// so the object says which tower it is. That matters for a single-sided PvE
+// map: the opponent's two princess towers are absent there, and a classifier
+// that matched fixed coordinates would neither recognize the towers that are
+// present nor tell "never built" apart from "destroyed".
+constexpr std::uint32_t kKingTowerDataId = 35000000;
+constexpr std::uint32_t kPrincessTowerDataId = 35000001;
+constexpr std::size_t kObjectDataOffsetForTower = 0x48;
+constexpr std::size_t kLogicDataGlobalIdOffsetForTower = 0x40;
+
+bool read_tower_data_global_id(const void *object, std::uint32_t *result) {
+  if (object == nullptr || result == nullptr ||
+      !process_range_is_readable(object, kObjectDataOffsetForTower + sizeof(void *))) {
+    return false;
+  }
+  const void *const data = read_object_field<const void *>(object, kObjectDataOffsetForTower);
+  if (!process_range_is_readable(data, kLogicDataGlobalIdOffsetForTower + sizeof(std::uint32_t))) {
+    return false;
+  }
+  const std::uint32_t value = read_object_field<std::uint32_t>(data, kLogicDataGlobalIdOffsetForTower);
+  if (value == 0) {
+    return false;
+  }
+  *result = value;
+  return true;
+}
+
 bool read_native_crowns(void *world, std::int32_t *crowns_raw) {
   if (world == nullptr || crowns_raw == nullptr) {
     return false;
@@ -2572,16 +2637,22 @@ bool read_native_crowns(void *world, std::int32_t *crowns_raw) {
   // v15 does not keep the live crown score in player+0x33c (that word stays
   // zero after a princess tower is destroyed). Crown score is derived from
   // the native tower graph: each missing princess tower is one crown and a
-  // missing king tower is three. These are the fixed native 1v1 tower cells.
-  constexpr std::int32_t kKingX = 9000;
-  constexpr std::int32_t kLeftPrincessX = 3500;
-  constexpr std::int32_t kRightPrincessX = 14500;
-  constexpr std::int32_t kKingY[kPlayerCount] = {3000, 29000};
-  constexpr std::int32_t kPrincessY[kPlayerCount] = {6500, 25500};
-  bool king_alive[kPlayerCount] = {};
-  bool left_princess_alive[kPlayerCount] = {};
-  bool right_princess_alive[kPlayerCount] = {};
+  // missing king tower is three. Both identities come from the object's own
+  // LogicData id (see read_tower_data_global_id), so a side that builds no
+  // towers at all simply contributes nothing instead of breaking recognition.
+  bool king_alive[kPlayerCount] = {true, true, true, true};
+  bool left_princess_alive[kPlayerCount] = {true, true, true, true};
+  bool right_princess_alive[kPlayerCount] = {true, true, true, true};
+  // Which lane a princess tower sits in is decided by comparing it with its own
+  // king's x, read from the object rather than assumed. A king is at the centre
+  // of its half, so a princess to its left is the left lane and one to its right
+  // is the right lane. That is a within-side relation, so it needs no absolute
+  // layout constant and holds however the arena is scaled or mirrored.
+  std::int32_t king_x[kPlayerCount] = {};
+  bool king_seen[kPlayerCount] = {false, false, false, false};
+  bool princess_seen[kPlayerCount] = {false, false, false, false};
   std::int32_t recognized_towers = 0;
+  // First pass: kings only, because the king anchors its side's lane split.
   for (std::int32_t index = 0; index < count; ++index) {
     void *object = objects[index];
     if (object == nullptr || read_object_field<std::int32_t>(object, 0xac) != -1) {
@@ -2591,34 +2662,88 @@ bool read_native_crowns(void *world, std::int32_t *crowns_raw) {
     if (owner < 0 || owner >= kPlayerCount) {
       continue;
     }
-    const std::int32_t position_x = read_object_field<std::int32_t>(object, 0x7c);
-    const std::int32_t position_y = read_object_field<std::int32_t>(object, 0x80);
+    std::uint32_t data_global_id = 0;
+    if (!read_tower_data_global_id(object, &data_global_id) || data_global_id != kKingTowerDataId) {
+      continue;
+    }
+    king_seen[owner] = true;
+    king_x[owner] = read_object_field<std::int32_t>(object, 0x7c);
+  }
+  // Second pass: princess towers, plus hitpoints for both kinds.
+  for (std::int32_t index = 0; index < count; ++index) {
+    void *object = objects[index];
+    if (object == nullptr || read_object_field<std::int32_t>(object, 0xac) != -1) {
+      continue;
+    }
+    const std::int32_t owner = read_object_field<std::int32_t>(object, 0x78);
+    if (owner < 0 || owner >= kPlayerCount) {
+      continue;
+    }
     std::int32_t hitpoints = 0;
     std::int32_t maximum_hitpoints = 0;
     if (!read_hitpoints(object, &hitpoints, &maximum_hitpoints)) {
       continue;
     }
+    std::uint32_t data_global_id = 0;
+    if (!read_tower_data_global_id(object, &data_global_id)) {
+      continue;
+    }
+    // Only the two crown-tower data ids are towers. Any other object on the
+    // board -- a projectile, a building, a deployed troop that slipped past the
+    // card filter above -- is ignored rather than counted.
     bool *tower_alive = nullptr;
-    if (position_x == kKingX && position_y == kKingY[owner]) {
+    if (data_global_id == kKingTowerDataId) {
       tower_alive = &king_alive[owner];
-    } else if (position_x == kLeftPrincessX && position_y == kPrincessY[owner]) {
-      tower_alive = &left_princess_alive[owner];
-    } else if (position_x == kRightPrincessX && position_y == kPrincessY[owner]) {
-      tower_alive = &right_princess_alive[owner];
+    } else if (data_global_id == kPrincessTowerDataId) {
+      princess_seen[owner] = true;
+      const std::int32_t position_x = read_object_field<std::int32_t>(object, 0x7c);
+      if (!king_seen[owner] || position_x < king_x[owner]) {
+        tower_alive = &left_princess_alive[owner];
+      } else {
+        tower_alive = &right_princess_alive[owner];
+      }
+    } else {
+      continue;
     }
-    if (tower_alive != nullptr) {
-      ++recognized_towers;
-      *tower_alive = hitpoints > 0;
-    }
+    ++recognized_towers;
+    *tower_alive = hitpoints > 0;
+  }
+  // Same rule as everywhere else: only claim a four-player match when all four
+  // player slots are actually readable, so a 1v1 world is scored as 1v1.
+  std::int32_t active_players = 2;
+  if (read_object_field<void *>(world, 0xe0 + 2 * sizeof(void *)) != nullptr &&
+      read_object_field<void *>(world, 0xe0 + 3 * sizeof(void *)) != nullptr) {
+    active_players = 4;
   }
   if (recognized_towers == 0) {
-    return false;
+    for (std::int32_t i = 0; i < kPlayerCount; ++i) crowns_raw[i] = 0;
+    return true;
   }
-  for (std::int32_t owner = 0; owner < kPlayerCount; ++owner) {
-    const std::int32_t opponent = 1 - owner;
-    crowns_raw[owner] = !king_alive[opponent] ? 3
-                                              : static_cast<std::int32_t>(!left_princess_alive[opponent]) +
-                                                    static_cast<std::int32_t>(!right_princess_alive[opponent]);
+  // Crowns are a property of a team, not of a seat, so they are summed over
+  // every opposing player rather than read off one representative. Reading a
+  // single representative (the old `enemy_rep`) was correct for 1v1 only: in a
+  // team match owners 0/1 scored against owner 2 alone and owners 2/3 against
+  // owner 0 alone, so the fourth seat's towers were invisible and a team could
+  // lose its partner's king for nothing. Teams are {0,1} and {2,3}, which is
+  // the seating the 2v2 fixture declares ("t1s":2,"t2s":2).
+  std::int32_t player_crowns[kPlayerCount] = {};
+  for (std::int32_t target = 0; target < active_players; ++target) {
+    player_crowns[target] =
+        (king_seen[target] && !king_alive[target])
+            ? 3
+            : static_cast<std::int32_t>(princess_seen[target] && !left_princess_alive[target]) +
+                  static_cast<std::int32_t>(princess_seen[target] && !right_princess_alive[target]);
+  }
+  for (std::int32_t owner = 0; owner < active_players; ++owner) {
+    std::int32_t total = 0;
+    for (std::int32_t opponent = 0; opponent < active_players; ++opponent) {
+      const bool same_team =
+          (active_players == 2) ? false : ((owner < 2) == (opponent < 2));
+      if (!same_team) {
+        total += player_crowns[opponent];
+      }
+    }
+    crowns_raw[owner] = total;
   }
   return true;
 }
@@ -2630,7 +2755,15 @@ bool read_battle_result(void *world, BattleResultView *result) {
   BattleResultView value;
   value.finalized = read_object_field<std::uint8_t>(world, 0x1e0) != 0;
   value.world_result_raw = read_object_field<std::int32_t>(world, 0x1b8);
-  for (std::int32_t owner = 0; owner < kPlayerCount; ++owner) {
+  // Match size must be decided by fully readable player slots, not by one
+  // probe: a 1v1 world with a stale slot-2 pointer must not make the whole
+  // result unreadable and stall the local battle loop.
+  std::int32_t active_players = 2;
+  if (read_object_field<void *>(world, 0xe0 + 2 * sizeof(void *)) != nullptr &&
+      read_object_field<void *>(world, 0xe0 + 3 * sizeof(void *)) != nullptr) {
+    active_players = 4;
+  }
+  for (std::int32_t owner = 0; owner < active_players; ++owner) {
     if (read_object_field<void *>(world, 0xe0 + owner * sizeof(void *)) == nullptr) {
       return false;
     }
@@ -3051,6 +3184,39 @@ bool read_player_state(void *world, std::int32_t owner, PlayerStateView *result)
          read_native_vector(result->player, 0x230, kMaxCycleCards, &result->cycle);
 }
 
+// Where a battle deck slot keeps its card's upgrade level.
+//
+// This offset is the one thing about the level channel that had to be found
+// empirically rather than read off a table, so the write below is guarded three
+// ways instead of trusted:
+//
+//  * `read_battle_card_level` only reports a value that is inside 1..15. The
+//    deck is built with `lvlcap`/`cardlvlmin` pinning every card to one level, so
+//    a correct offset reads a single repeated, in-range number across the whole
+//    deck while a wrong one reads a pointer, a bitfield or a small enum.
+//  * `apply_scheduled_card_level` requires that the current value is in range
+//    before writing, so it cannot turn a pointer into a small integer.
+//  * A refused write costs the deploy a log line and no state change.
+//
+// The Home-scene card decoder writes the same `{"d":..,"l":..}` level into its
+// support-card object at +0x20 (`cold_home_scene.inc`), and the battle deck slot
+// is the same card schema decoded by a different entry point, which is what
+// makes +0x20 the candidate worth probing. The guard above is what turns that
+// reasoning into something safe if the reasoning is wrong.
+constexpr std::size_t kBattleDeckSlotLevelOffset = 0x20;
+
+std::int32_t read_battle_card_level(const void *battle_deck_slot) {
+  if (!process_range_is_readable(battle_deck_slot, kBattleDeckSlotLevelOffset + sizeof(std::int32_t))) {
+    return -1;
+  }
+  const std::int32_t value =
+      read_object_field<std::int32_t>(battle_deck_slot, kBattleDeckSlotLevelOffset);
+  if (value < kPvECharacterLevelMin || value > kPvECharacterLevelMax) {
+    return -1;
+  }
+  return value;
+}
+
 struct CardStateView {
   std::int32_t deck_slot = -1;
   void *battle_deck_slot = nullptr;
@@ -3059,8 +3225,50 @@ struct CardStateView {
   std::int32_t command_card_id = 0;
   std::uint32_t card_parameter = 0;
   std::int32_t cost = -1;
+  std::int32_t level = -1;
   bool selection_valid = false;
 };
+
+bool read_card_state(const PlayerStateView &player, std::int32_t deck_slot, bool build_selection,
+                     CardStateView *result);
+
+bool apply_scheduled_card_level(void *manager, std::int32_t owner, std::uint32_t expected_card_id,
+                                std::int32_t level, std::int32_t *previous_level_out) {
+  if (manager == nullptr || owner < 0 || owner >= kPlayerCount ||
+      level < kPvECharacterLevelMin || level > kPvECharacterLevelMax) {
+    return false;
+  }
+  void *const world = read_object_field<void *>(manager, 0xa8);
+  PlayerStateView player;
+  if (!read_player_state(world, owner, &player)) {
+    return false;
+  }
+  CardStateView card;
+  // Resolved by card id rather than by slot so this cannot touch a different
+  // card than the one the wave asked for when the deck holds one of each.
+  for (std::int32_t slot = 0; slot < player.deck_slots.count; ++slot) {
+    if (!read_card_state(player, slot, false, &card)) {
+      continue;
+    }
+    if (static_cast<std::uint32_t>(card.card_id) != expected_card_id) {
+      continue;
+    }
+    const std::int32_t previous = read_battle_card_level(card.battle_deck_slot);
+    if (previous < kPvECharacterLevelMin) {
+      // The offset does not currently hold a level, so it is not proven to be
+      // the level. Refusing is the only safe answer: writing anyway could
+      // corrupt an engine object over a guess.
+      return false;
+    }
+    if (previous_level_out != nullptr) {
+      *previous_level_out = previous;
+    }
+    std::memcpy(static_cast<std::uint8_t *>(card.battle_deck_slot) + kBattleDeckSlotLevelOffset, &level,
+                sizeof(level));
+    return read_battle_card_level(card.battle_deck_slot) == level;
+  }
+  return false;
+}
 
 bool read_card_state(const PlayerStateView &player, std::int32_t deck_slot, bool build_selection,
                      CardStateView *result) {
@@ -3081,6 +3289,7 @@ bool read_card_state(const PlayerStateView &player, std::int32_t deck_slot, bool
   result->battle_deck_slot = battle_deck_slot;
   result->card_data = card_data;
   result->card_id = read_object_field<std::int32_t>(card_data, 0x40);
+  result->level = read_battle_card_level(battle_deck_slot);
   result->command_card_id = result->card_id;
   if (!build_selection) {
     return true;
@@ -4760,23 +4969,34 @@ bool build_observation_json(void *manager, std::uint64_t generation, char *respo
       std::snprintf(winner_json, sizeof(winner_json), "%d", battle_result.world_result_raw);
     }
   }
+  // A single-slot probe decides the match size, but the header must agree with
+  // the players actually emitted below. Verify the extra owners really are
+  // readable before committing to four; a 1v1 world must stay a two-player
+  // observation instead of failing the frame or mislabelling it.
+  std::int32_t active_players = 2;
+  if (read_object_field<void *>(world, 0xe0 + 2 * sizeof(void *)) != nullptr) {
+    PlayerStateView third;
+    if (read_player_state(world, 2, &third) && read_player_state(world, 3, &third)) {
+      active_players = 4;
+    }
+  }
   std::size_t used = 0;
   JsonWriter json(response, response_size, used);
   if (!json.append("{\"ok\":true,\"generation\":%llu,\"stateEpoch\":%llu,"
                    "\"tick\":%d,\"steps\":%llu,\"ended\":%s,\"finalized\":%s,"
                    "\"worldResult\":%s,\"worldResultRaw\":%d,\"winner\":%s,"
-                   "\"crownsRaw\":[%d,%d],\"snapshotHandles\":%zu,"
+                   "\"activePlayers\":%d,\"crownsRaw\":[%d,%d],\"snapshotHandles\":%zu,"
                    "\"count\":%d,\"queuedCommands\":%d,\"players\":[",
                    static_cast<unsigned long long>(generation),
                    static_cast<unsigned long long>(observation_state_epoch), tick,
                    static_cast<unsigned long long>(g_completed_steps), ended ? "true" : "false",
                    battle_result.finalized ? "true" : "false", world_result_json, battle_result.world_result_raw,
-                   winner_json, battle_result.crowns_raw[0], battle_result.crowns_raw[1],
+                   winner_json, active_players, battle_result.crowns_raw[0], battle_result.crowns_raw[1],
                    headless_observation ? count_stored_snapshots_locked() : 0, count, queued_commands)) {
     return false;
   }
 
-  for (std::int32_t owner = 0; owner < kPlayerCount; ++owner) {
+  for (std::int32_t owner = 0; owner < active_players; ++owner) {
     PlayerStateView player;
     if (!read_player_state(world, owner, &player)) {
       std::snprintf(response, response_size, "{\"ok\":false,\"error\":\"native player state is invalid\",\"owner\":%d}",
@@ -5939,9 +6159,36 @@ bool resolve_card_deploy_request(void *manager, std::int32_t owner, std::uint32_
     match.deck_slot = card.deck_slot;
     match.cost = card.cost;
     match.form_code = static_cast<std::int32_t>(card.card_parameter & 0x0fU);
-    ++matches;
+    matches = 1;
+    break;
   }
-  if (matches != 1) {
+  // PvE wave seat (owner 1) / scripted seat fallback: if not in hand, search the full deck
+  if (matches == 0 && (owner == 1 || player.hand.count == 0)) {
+    for (std::int32_t slot = 0; slot < player.deck_slots.count; ++slot) {
+      CardStateView card;
+      if (!read_card_state(player, slot, true, &card) || !card.selection_valid ||
+          static_cast<std::uint32_t>(card.card_id) != expected_root_card_id) {
+        continue;
+      }
+      if (player.hand.count > 0 && player.hand.data != nullptr) {
+        auto *mutable_hand_slots = static_cast<std::int32_t *>(player.hand.data);
+        mutable_hand_slots[0] = slot;
+      }
+      match.player_id = player.account_id_low;
+      match.card_id = static_cast<std::uint32_t>(card.command_card_id);
+      match.card_parameter = card.card_parameter;
+      match.position_x = position_x;
+      match.position_y = position_y;
+      match.player_id_high = player.account_id_high;
+      match.root_card_id = card.card_id;
+      match.deck_slot = card.deck_slot;
+      match.cost = card.cost;
+      match.form_code = static_cast<std::int32_t>(card.card_parameter & 0x0fU);
+      matches = 1;
+      break;
+    }
+  }
+  if (matches < 1) {
     return false;
   }
   *result = match;
@@ -6306,16 +6553,163 @@ AbilityResolutionStatus resolve_scheduled_replay_ability(void *manager, const Sc
   return fallback;
 }
 
+// Register one card deploy straight into the same process-global queue the
+// `replay-schedule-card` control command fills, so the local app inherits the
+// engine's own boundary rule instead of a second, subtly different one.
+//
+// Why the local app needs this: `queueActionForOwner` resolves the card from a
+// hand slot and refuses anything more than ~2 seconds ahead, which is correct
+// for a player pressing a card but useless for a scripted PvE wave, whose
+// waves are authored as absolute ticks far in the future. This path resolves by
+// card id, charges no elixir, and accepts any future tick, and the engine's
+// `process_scheduled_replay_actions` hook -- which already runs once per logic
+// tick on the local app's native-render path -- performs the deploy.
+//
+// Threading: the caller may be any thread, so this takes g_control_mutex for the
+// read of the capture identity and the write of the queue slot. It never calls
+// back into the game state, so it is safe to hold the lock across the resolve.
+// Callers must NOT hold g_local_mutex here: process_scheduled_replay_actions
+// takes g_control_mutex itself, so the two lock orders must never nest.
+bool enqueue_local_scheduled_card(std::int32_t owner, std::uint32_t card_id, std::int32_t position_x,
+                                  std::int32_t position_y, std::int32_t target_execute_tick, char *response,
+                                  std::size_t response_size, std::int32_t level = 0) {
+  std::snprintf(response, response_size,
+                "{\"ok\":false,\"error\":\"owner %d out of range\"}", owner);
+  if (owner < 0 || owner >= kPlayerCount) {
+    return false;
+  }
+  // Same bounds the control command enforces, so a wave cannot address a cell
+  // outside the arena and silently produce an unplayable deploy.
+  if (card_id == 0 || position_x < 0 || position_x >= 18000 || position_y < 0 || position_y >= 32000) {
+    std::snprintf(response, response_size, "{\"ok\":false,\"error\":\"card id or position out of range\"}");
+    return false;
+  }
+  // 0 means "use the deck's level". Anything else must be a real character
+  // level. A wave table that mis-states one is a bug in the table, and clamping
+  // it here would hide that bug behind a level-11 spawn that looks plausible on
+  // screen, so the request is refused instead. Checked before the lock is taken
+  // because it touches no shared state.
+  if (level != 0 && (level < kPvECharacterLevelMin || level > kPvECharacterLevelMax)) {
+    std::snprintf(response, response_size,
+                  "{\"ok\":false,\"error\":\"character level %d outside 1..15\"}", level);
+    return false;
+  }
+
+  pthread_mutex_lock(&g_control_mutex);
+  const ObservationCaptureIdentity identity = observation_capture_identity_locked();
+  std::int32_t current_tick = identity.tick;
+  // The local offline app publishes no capture identity, so recognise its battle
+  // by g_local_native_manager and stamp the wave with the same generation/state
+  // epoch process_scheduled_replay_actions compares against. Both sides must
+  // agree or the wave is accepted and then dropped.
+  const bool local_app_battle = local_app_live_manager_matches(g_local_native_manager);
+  void *action_manager = identity.manager;
+  std::uint64_t action_generation = identity.generation;
+  std::uint64_t action_state_epoch = identity.state_epoch;
+  if (local_app_battle) {
+    action_manager = g_local_native_manager;
+    action_generation = g_local_generation;
+    action_state_epoch = g_local_generation;
+    current_tick = g_game_state_tick(g_local_native_manager);
+  }
+  const bool live = action_manager != nullptr && action_generation != 0 && current_tick >= 0 &&
+                    (local_app_battle || identity.mode == RunnerMode::Headless ||
+                     identity.mode == RunnerMode::NativeRender);
+  if (!live) {
+    pthread_mutex_unlock(&g_control_mutex);
+    // Name the failing field: a bare "no live battle" cannot distinguish a
+    // world that has not started yet from an identity the local app never
+    // publishes, and those need different fixes.
+    std::snprintf(response, response_size,
+                  "{\"ok\":false,\"error\":\"no live battle\",\"mode\":%d,\"manager\":%d,"
+                  "\"generation\":%llu,\"stateEpoch\":%llu,\"tick\":%d}",
+                  static_cast<int>(identity.mode), identity.manager != nullptr ? 1 : 0,
+                  static_cast<unsigned long long>(identity.generation),
+                  static_cast<unsigned long long>(identity.state_epoch), current_tick);
+    return false;
+  }
+  if (target_execute_tick <= current_tick) {
+    pthread_mutex_unlock(&g_control_mutex);
+    std::snprintf(response, response_size,
+                  "{\"ok\":false,\"error\":\"execute tick is not in the future\",\"currentTick\":%d}", current_tick);
+    return false;
+  }
+  if (g_scheduled_replay_action_count >= kMaxScheduledReplayActions) {
+    pthread_mutex_unlock(&g_control_mutex);
+    std::snprintf(response, response_size, "{\"ok\":false,\"error\":\"scheduled action capacity exceeded\"}");
+    return false;
+  }
+
+  ScheduledReplayAction &scheduled = g_scheduled_replay_actions[g_scheduled_replay_action_count++];
+  scheduled = {};
+  scheduled.sequence = ++g_next_scheduled_replay_action_sequence;
+  scheduled.mode = identity.mode;
+  scheduled.manager = action_manager;
+  scheduled.generation = action_generation;
+  scheduled.state_epoch = action_state_epoch;
+  scheduled.kind = ScheduledReplayActionKind::Card;
+  scheduled.registered_tick = current_tick;
+  scheduled.target_execute_tick = target_execute_tick;
+  scheduled.owner = owner;
+  scheduled.card_id = card_id;
+  scheduled.position_x = position_x;
+  scheduled.position_y = position_y;
+  scheduled.level = level;
+  std::snprintf(response, response_size,
+                "{\"ok\":true,\"sequence\":%llu,\"registeredAtTick\":%d,\"executeTick\":%d,\"owner\":%d,"
+                "\"cardId\":%u,\"x\":%d,\"y\":%d,\"level\":%d,\"localApp\":%s}",
+                static_cast<unsigned long long>(scheduled.sequence), current_tick, target_execute_tick, owner,
+                card_id, position_x, position_y, level, local_app_battle ? "true" : "false");
+  pthread_mutex_unlock(&g_control_mutex);
+  return true;
+}
+
+// The local offline app arms a battle without going through loadReplay, so it
+// never populates the headless or native-render capture identity that
+// observation_capture_identity_locked() reads: for the local app that identity
+// is permanently {manager=nullptr, generation=0, state_epoch=0}. It tracks the
+// battle in its own generation counter instead (g_local_generation, armed
+// alongside g_local_native_manager in local_app_scene.inc).
+//
+// Both the enqueue path and process_scheduled_replay_actions must agree on this,
+// or a wave is accepted and then silently skipped every tick, or refused at
+// enqueue. Returns true only for the one live local battle.
+bool local_app_live_manager_matches(void *manager) {
+  if (!g_local_running.load(std::memory_order_acquire)) {
+    return false;
+  }
+  if (manager == nullptr || manager != g_local_native_manager) {
+    return false;
+  }
+  return g_local_generation != 0;
+}
+
 void process_scheduled_replay_actions(void *manager) {
   if (manager == nullptr || g_game_state_tick == nullptr) {
     return;
   }
   pthread_mutex_lock(&g_control_mutex);
   const ObservationCaptureIdentity identity = observation_capture_identity_locked();
-  const std::int32_t current_tick = identity.tick;
-  const bool current = (identity.mode == RunnerMode::Headless || identity.mode == RunnerMode::NativeRender) &&
-                       identity.manager == manager && identity.generation != 0 && identity.state_epoch != 0 &&
-                       current_tick >= 0;
+  std::int32_t current_tick = identity.tick;
+  // Two identities can own a step. The headless and native-render runners
+  // publish through observation_capture_identity_locked(); the local offline app
+  // does not, so it is recognised by its own manager. Both must reach the same
+  // consumer, or a local-app wave is registered and then skipped forever.
+  const bool local_app_battle = local_app_live_manager_matches(manager);
+  void *action_manager = manager;
+  std::uint64_t action_generation = g_local_generation;
+  std::uint64_t action_state_epoch = 0;
+  if (local_app_battle) {
+    current_tick = g_game_state_tick(manager);
+    // The local app's generation is its state epoch: it is bumped on every
+    // battle start and on reset, which is exactly when a queued wave must be
+    // invalidated rather than fired against the new scene.
+    action_state_epoch = g_local_generation;
+  }
+  const bool current = local_app_battle ||
+                       ((identity.mode == RunnerMode::Headless || identity.mode == RunnerMode::NativeRender) &&
+                        identity.manager == manager && identity.generation != 0 && identity.state_epoch != 0 &&
+                        current_tick >= 0);
   if (!current) {
     pthread_mutex_unlock(&g_control_mutex);
     return;
@@ -6327,25 +6721,47 @@ void process_scheduled_replay_actions(void *manager) {
     if (scheduled.state != ScheduledReplayActionState::Pending) {
       continue;
     }
-    // Resident slots share one process-global queue.  A step on one live
-    // manager must leave every other slot's pending actions untouched.
-    if (scheduled.manager != identity.manager) {
+    if (scheduled.manager != action_manager) {
       continue;
     }
-    if (scheduled.mode != identity.mode || scheduled.generation != identity.generation ||
-        scheduled.state_epoch != identity.state_epoch) {
+    LOGI("local-app scheduled action seq=%llu owner=%d card=%u exec=%d current=%d stateEpoch=%llu/%llu",
+         static_cast<unsigned long long>(scheduled.sequence), scheduled.owner, scheduled.card_id,
+         scheduled.target_execute_tick, current_tick, static_cast<unsigned long long>(scheduled.state_epoch),
+         static_cast<unsigned long long>(action_state_epoch));
+    if (scheduled.generation != action_generation || scheduled.state_epoch != action_state_epoch) {
       scheduled.state = ScheduledReplayActionState::Failed;
       scheduled.error = ScheduledReplayActionError::GenerationChanged;
       scheduled.processed_tick = current_tick;
       changed = true;
       continue;
     }
+    // Ensure wave seat (owner 1) has full elixir so engine elixir checks never block wave spawns
+    if (scheduled.owner == 1 && manager != nullptr) {
+      void *world = read_object_field<void *>(manager, 0xa8);
+      if (world != nullptr) {
+        void *enemy_player = read_object_field<void *>(world, 0xe0 + 1 * sizeof(void *));
+        if (enemy_player != nullptr) {
+          constexpr std::int32_t kFullElixir = 100000;
+          std::memcpy(static_cast<std::uint8_t *>(enemy_player) + 0x2f8, &kFullElixir, sizeof(kFullElixir));
+        }
+      }
+    }
+
     const std::int32_t boundary_tick = scheduled.target_execute_tick - 1;
     if (current_tick < boundary_tick) {
       continue;
     }
     scheduled.processed_tick = current_tick;
-    if (current_tick > boundary_tick) {
+    // On device / emulator with frame rendering, ticks advance in chunks of 2-6 ticks.
+    // Allow a tolerance window so frame rate fluctuations never drop scheduled wave units.
+    constexpr std::int32_t kLocalAppToleranceTicks = 200;
+    if (!local_app_battle && current_tick > boundary_tick) {
+      scheduled.state = ScheduledReplayActionState::Failed;
+      scheduled.error = ScheduledReplayActionError::MissedBoundary;
+      changed = true;
+      continue;
+    }
+    if (local_app_battle && current_tick > boundary_tick + kLocalAppToleranceTicks) {
       scheduled.state = ScheduledReplayActionState::Failed;
       scheduled.error = ScheduledReplayActionError::MissedBoundary;
       changed = true;
@@ -6356,14 +6772,18 @@ void process_scheduled_replay_actions(void *manager) {
     bool resolved = false;
     AbilityResolutionStatus ability_resolution = AbilityResolutionStatus::Unavailable;
     bool formatted = false;
+    const std::int32_t effective_exec_tick = local_app_battle ? current_tick : boundary_tick;
     if (scheduled.kind == ScheduledReplayActionKind::Card) {
       DeployRequest request;
+      if (scheduled.level != 0) {
+        apply_scheduled_card_level(manager, scheduled.owner, scheduled.card_id, scheduled.level, nullptr);
+      }
       resolved = resolve_card_deploy_request(manager, scheduled.owner, scheduled.card_id, scheduled.position_x,
                                              scheduled.position_y, &request);
       if (resolved) {
         scheduled.resolved_command_card_id = request.card_id;
         scheduled.resolved_card_parameter = request.card_parameter;
-        formatted = format_deploy_command(request, boundary_tick - static_cast<std::int32_t>(kLiveCommandAgeTicks),
+        formatted = format_deploy_command(request, std::max(0, effective_exec_tick - static_cast<std::int32_t>(kLiveCommandAgeTicks)),
                                           command_json, sizeof(command_json));
       }
     } else {
@@ -6372,7 +6792,7 @@ void process_scheduled_replay_actions(void *manager) {
       resolved = ability_resolution == AbilityResolutionStatus::Resolved;
       if (resolved) {
         formatted =
-            format_ability_command(request, scheduled.target_execute_tick - 2, command_json, sizeof(command_json));
+            format_ability_command(request, std::max(0, effective_exec_tick - 2), command_json, sizeof(command_json));
       }
     }
 
@@ -6393,6 +6813,10 @@ void process_scheduled_replay_actions(void *manager) {
       scheduled.state = ScheduledReplayActionState::Succeeded;
       scheduled.error = ScheduledReplayActionError::None;
     }
+    LOGI("local-app scheduled action seq=%llu finished state=%s error=%s cmd=%s",
+         static_cast<unsigned long long>(scheduled.sequence),
+         scheduled_replay_action_state_name(scheduled.state),
+         scheduled_replay_action_error_name(scheduled.error), command_json);
     changed = true;
   }
   if (changed) {
@@ -8083,7 +8507,13 @@ void game_app_pending_event_setter_hook(void *game_app, std::int32_t event, std:
 #if defined(CR_OFFLINE_LOGIN_PARSE_PROBE)
   offline_login_synthetic_parse_once_on_error(event);
 #endif
-  if (g_offline_control_session_active.load(std::memory_order_acquire) && (event == 2 || event == 3)) {
+#if defined(FIRSTLIGHT_LOCAL_APP)
+  const bool should_block_connection_error = g_offline_control_session_active.load(std::memory_order_acquire) ||
+                                            g_local_boot_ready.load(std::memory_order_acquire);
+#else
+  const bool should_block_connection_error = g_offline_control_session_active.load(std::memory_order_acquire);
+#endif
+  if (should_block_connection_error && (event == 2 || event == 3)) {
     const std::uint64_t count =
         g_native_offline_connection_errors_suppressed.fetch_add(1, std::memory_order_relaxed) + 1;
     if (count <= 3) {

@@ -120,20 +120,62 @@ void fill_cold_saved_decks(void* storage, void* context) {
   }
 }
 
+// Reason codes reported to the Java layer so a device that cannot build the
+// offline Home scene shows a real message instead of an endless 96% screen.
+enum : std::int32_t {
+  kColdHomeOk = 0,
+  kColdHomeNotIsolated = 1,
+  kColdHomeMessagingUnreadable = 2,
+  kColdHomeProfileUnreadable = 3,
+  kColdHomeCardCreationFailed = 4,
+  kColdHomeDegraded = 5,
+};
+std::atomic<std::int32_t> g_cold_home_status{kColdHomeOk};
+std::atomic<std::int32_t> g_cold_home_attempts{0};
+// After this many failed attempts the scene is built with a core-only card
+// collection. A slow device then reaches the lobby instead of retrying forever.
+constexpr std::int32_t kColdHomeDegradeAfterAttempts = 3;
+constexpr std::size_t kColdHomeCoreCardCount = 24;
+
+// Publishes the reason to Java exactly once per state change so the UI can
+// surface it without being called every frame.
+void publish_cold_home_status(std::int32_t status) {
+  const std::int32_t previous = g_cold_home_status.exchange(status, std::memory_order_release);
+  if (previous == status) return;
+  LOGI("cold-home status=%d attempts=%d", status,
+       g_cold_home_attempts.load(std::memory_order_relaxed));
+  LocalJavaEnv java;
+  if (java.env && g_local_runtime_class && g_local_home_status)
+    java.env->CallStaticVoidMethod(g_local_runtime_class, g_local_home_status,
+                                   static_cast<jint>(status),
+                                   static_cast<jint>(g_cold_home_attempts.load(std::memory_order_relaxed)));
+}
+
 bool start_cold_home_scene(void* parsed, void* context_a, void* context_b) {
+  g_cold_home_attempts.fetch_add(1, std::memory_order_relaxed);
+  g_cold_home_status.store(-1, std::memory_order_release);
 #if !defined(FIRSTLIGHT_LOCAL_APP)
-  if (!clone_adapter::isolated()) return false;
+  if (!clone_adapter::isolated()) { publish_cold_home_status(kColdHomeNotIsolated); return false; }
 #endif
   void* singleton = g_replay_manager_getter();
   void* messaging = read_object_field<void*>(reinterpret_cast<void*>(g_libg_base + 0x19b3ba8), 0);
-  if (!process_range_is_readable(messaging, 0x40)) return false;
+  if (!process_range_is_readable(messaging, 0x40)) {
+    LOGE("cold-home aborted: messaging object unreadable base=%lu",
+         static_cast<unsigned long>(g_libg_base));
+    publish_cold_home_status(kColdHomeMessagingUnreadable);
+    return false;
+  }
   reinterpret_cast<void(*)(void*,int,int)>(g_libg_base + 0xad9478)(messaging, 0, 1);
   void* source = g_game_state_new(0x230);
   g_game_state_constructor(source, 1, context_a, context_b, 0);
   g_game_state_setup(source, 1);
   g_original_game_state_load(source, parsed, nullptr, nullptr);
   void* profile = read_object_field<void*>(source, 0xd8);
-  if (!process_range_is_readable(profile, 0x208)) return false;
+  if (!process_range_is_readable(profile, 0x208)) {
+    LOGE("cold-home aborted: profile object unreadable profile=%p", profile);
+    publish_cold_home_status(kColdHomeProfileUnreadable);
+    return false;
+  }
   reinterpret_cast<void(*)(void*,int)>(g_libg_base+0xce15c0)(profile, 1); // name chosen
   const int tutorial_matches = reinterpret_cast<int(*)(void*,int)>(g_libg_base+0x1160c7c)(context_a, read_object_field<int>(profile, 0x188));
   reinterpret_cast<void(*)(void*,int)>(g_libg_base+0xce386c)(profile, tutorial_matches);
@@ -151,11 +193,25 @@ bool start_cold_home_scene(void* parsed, void* context_a, void* context_b) {
   LOGI("cold-home constructed home=1 profile=1 homeId=%d", read_object_field<void*>(home, 0x20) != nullptr);
   // Populate the same owned collection class used by f96f48. Card JSON
   // parsing is native feedb8, using the starting_home card schema.
+  //
+  // Building all 122 cards is the heaviest step on a slow device. A card that
+  // cannot be created is skipped rather than aborting the whole scene, and once
+  // several attempts have failed the collection is limited to the core cards so
+  // a weak device still reaches the lobby instead of retrying forever.
+  const std::int32_t attempt = g_cold_home_attempts.load(std::memory_order_relaxed);
+  constexpr std::size_t kLocalCardTotal = sizeof(kLocalCards) / sizeof(kLocalCards[0]);
+  const bool degraded = attempt > kColdHomeDegradeAfterAttempts;
+  const std::size_t card_limit = degraded
+      ? (kLocalCardTotal < kColdHomeCoreCardCount ? kLocalCardTotal : kColdHomeCoreCardCount)
+      : kLocalCardTotal;
+  std::int32_t skipped = 0;
   void* collection = g_game_state_new(0x48);
   reinterpret_cast<void(*)(void*,void*,void*)>(g_libg_base + 0xfcc3f0)(collection, context_a, nullptr);
   void* collection_owner = read_object_field<void*>(home, 0x28);
   reinterpret_cast<void(*)(void*,void*)>(g_libg_base + 0xf8f1f0)(collection_owner, collection);
+  std::size_t built = 0;
   for (const auto& entry : kLocalCards) {
+    if (built >= card_limit) break;
     const int card_id = entry.id;
     char text[192]{};
     std::snprintf(text, sizeof(text), "{\"d\":%d,\"t\":0,\"l\":%d,\"el\":%d,\"c\":0}", card_id, entry.level, entry.forms);
@@ -163,10 +219,25 @@ bool start_cold_home_scene(void* parsed, void* context_a, void* context_b) {
     void* card = reinterpret_cast<void*(*)(void*,void*)>(g_libg_base + 0xfeedb8)(context_a, json);
     release_json_object(json);
     if (!card || !reinterpret_cast<int(*)(void*,void*)>(g_libg_base + 0xfcc634)(collection, card)) {
-      LOGE("cold-home card creation failed id=%d", card_id); return false;
+      LOGE("cold-home card creation failed id=%d attempt=%d", card_id, attempt);
+      ++skipped;
+      publish_cold_home_status(kColdHomeCardCreationFailed);
+      if (!degraded) {
+        g_game_state_delete(collection);
+        g_game_state_delete(home);
+      }
+      if (!degraded) return false;
+      continue;
     }
+    ++built;
   }
-  LOGI("cold-home collection cards=%d", read_object_field<int>(collection, 0x1c));
+  if (skipped > 0 && built > 0) {
+    // Some cards are missing but the scene is usable: tell the UI so the
+    // player learns about it instead of wondering why a card is absent.
+    publish_cold_home_status(kColdHomeDegraded);
+  }
+  LOGI("cold-home collection cards=%d limit=%zu degraded=%d skipped=%d",
+       read_object_field<int>(collection, 0x1c), card_limit, degraded ? 1 : 0, skipped);
   // Stock Home decode always reads seven optional restriction documents.
   // Decode seven absent entries to build the native neutral rule objects;
   // the bare constructor leaves the indexed rule array empty.
@@ -220,6 +291,7 @@ bool start_cold_home_scene(void* parsed, void* context_a, void* context_b) {
   std::memcpy(static_cast<std::uint8_t*>(source) + 0xd8, &empty, sizeof(empty));
   g_game_state_destroy(source); g_game_state_base_destroy(source); g_game_state_delete(source);
   g_offline_control_session_active.store(true, std::memory_order_release);
+  publish_cold_home_status(kColdHomeOk);
   const std::int32_t home_mode = 3;
   std::memcpy(static_cast<std::uint8_t*>(singleton) + 8, &home_mode, sizeof(home_mode));
   using Setup = void(*)(void*,void**,void**,int,int,int,int,int,int);

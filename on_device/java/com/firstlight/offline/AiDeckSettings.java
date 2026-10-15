@@ -57,35 +57,46 @@ public final class AiDeckSettings {
         } catch(Exception invalid) { return "卡组不可用，请重新保存"; }
     }
     public static void show(Activity activity,AiOpponentPicker.Catalog catalog) {
-        String[] labels=new String[catalog.choices.size()];
-        for(int i=0;i<labels.length;i++) {
+        String[] labels=new String[catalog.choices.size()+1];
+        for(int i=0;i<catalog.choices.size();i++) {
             AiOpponentPicker.Choice choice=catalog.choices.get(i);
             labels[i]=choice.label+(savedDeck(activity,choice.id).isEmpty()?" · 默认卡组":" · 已保存独立卡组");
         }
+        labels[catalog.choices.size()]="🤝 2v2 AI 队友"+(savedDeck(activity,"teammate").isEmpty()?" · 默认协同辅助卡组":" · 已保存独立卡组");
         new AlertDialog.Builder(activity,android.R.style.Theme_Material_Light_Dialog_Alert)
             .setTitle("配置 AI 卡组")
-            .setItems(labels,(dialog,index) -> edit(activity,catalog.choices.get(index)))
+            .setItems(labels,(dialog,index) -> {
+                if(index<catalog.choices.size()) {
+                    AiOpponentPicker.Choice choice=catalog.choices.get(index);
+                    String fallback=choice.id.startsWith("hog26_")?"默认 2.6 猪卡组":"默认跟随玩家卡组";
+                    edit(activity,choice.id,choice.label,fallback);
+                } else {
+                    edit(activity,"teammate","2v2 AI 队友","默认协同辅助卡组（女武神/女枪/飞龙/小皮卡/火球/箭雨/蝙蝠/骑士）");
+                }
+            })
             .setNegativeButton("关闭",null).show();
     }
-    private static void edit(Activity activity,AiOpponentPicker.Choice choice) {
+    private static void edit(Activity activity,String id,String label,String fallback) {
         final String current=playerDeck;
-        String saved=savedDeck(activity,choice.id);
-        String fallback=choice.id.startsWith("hog26_")?"默认 2.6 猪卡组":"默认跟随玩家卡组";
+        String saved=savedDeck(activity,id);
         String message="AI 当前使用：\n"+(saved.isEmpty()?fallback:summary(saved))+
             "\n\n当前玩家卡组：\n"+summary(current)+
             "\n\n在 Collection → Decks 编辑卡组，然后在这里保存给 AI。保存后可切回玩家卡组，AI 的八卡、形态和塔楼部队会独立保留。";
         AlertDialog dialog=new AlertDialog.Builder(activity,android.R.style.Theme_Material_Light_Dialog_Alert)
-            .setTitle(choice.label+" · AI 卡组").setMessage(message)
+            .setTitle(label+" · 卡组配置").setMessage(message)
             .setPositiveButton("保存当前卡组给 AI",(ignored,which) -> {
                 String equipment;
                 try {
                     equipment=equipmentJson(current);
-                } catch(Exception invalid) { return; }
-                boolean ok=activity.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(choice.id,equipment).commit();
-                Toast.makeText(activity,ok?"AI 卡组已独立保存":"保存失败，请重试",Toast.LENGTH_SHORT).show();
+                } catch(Exception invalid) {
+                    Toast.makeText(activity,"请配置完整的八张卡牌及塔楼部队",Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                boolean ok=activity.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(id,equipment).commit();
+                Toast.makeText(activity,ok?label+"卡组已独立保存":"保存失败，请重试",Toast.LENGTH_SHORT).show();
             })
             .setNeutralButton("恢复默认",(ignored,which) -> {
-                boolean ok=activity.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(choice.id).commit();
+                boolean ok=activity.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().remove(id).commit();
                 Toast.makeText(activity,ok?"已恢复默认卡组":"保存失败，请重试",Toast.LENGTH_SHORT).show();
             }).setNegativeButton("取消",null).create();
         dialog.show();

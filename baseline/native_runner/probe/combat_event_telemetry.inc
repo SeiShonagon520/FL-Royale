@@ -529,9 +529,12 @@ bool capture_combat_deployment(const CombatCaptureContext &capture, void *owner_
   PlayerStateView player{};
   for (std::int32_t candidate_owner = 0; candidate_owner < kPlayerCount; ++candidate_owner) {
     PlayerStateView candidate{};
+    // kPlayerCount is the widest supported match size. A 1v1 world simply has
+    // no slot for the extra owners, so an unreadable slot means "not in this
+    // match" rather than a corrupt world. Failing closed here would reject
+    // every deployment in a normal 1v1 battle.
     if (!read_player_state(const_cast<void *>(world), candidate_owner, &candidate)) {
-      LOGE("deployment validation rejected at world-player candidate=%d", candidate_owner);
-      return false;
+      continue;
     }
     if (candidate.player != owner_root) {
       continue;

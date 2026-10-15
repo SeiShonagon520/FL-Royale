@@ -28,7 +28,8 @@ def download(url: str, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(target.suffix + ".download")
     print(f"Downloading {target.name}", flush=True)
-    with urllib.request.urlopen(url, timeout=120) as response, temporary.open("wb") as output:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    with urllib.request.urlopen(req, timeout=120) as response, temporary.open("wb") as output:
         shutil.copyfileobj(response, output)
     temporary.replace(target)
 
@@ -39,6 +40,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--export-models", action="store_true")
     parser.add_argument("--keep-build-work", action="store_true")
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     if args.config:
         os.environ["FL_BUILD_CONFIG"] = str(args.config.resolve())
@@ -50,7 +52,12 @@ def main() -> None:
     os.environ["PATH"] = str(config["java_home"] / "bin") + os.pathsep + os.environ["PATH"]
     output = args.output.resolve() if args.output else ROOT / "dist/fl-royale-1.8-r1.apk"
     if output.exists():
-        raise FileExistsError(f"Output already exists: {output}. Choose another --output path.")
+        if args.overwrite:
+            output.unlink()
+            if output.with_suffix(".build.json").exists():
+                output.with_suffix(".build.json").unlink()
+        else:
+            raise FileExistsError(f"Output already exists: {output}. Choose another --output path or use --overwrite.")
     if not config["base_apk"].is_file():
         raise FileNotFoundError(f"Build the Firstlight CR offline APK first: {config['base_apk']}")
     build = ROOT / "build"
@@ -66,6 +73,14 @@ def main() -> None:
 
     run(python, "-B", ROOT / "tools/generate_local_cards.py")
     run(python, "-B", ROOT / "tools/stage_mobile_semantics.py")
+    # Must run after staging: the mode pacing gate lives in the staged
+    # battle_env copy, which is re-copied from the upstream checkout.
+    run(python, "-B", ROOT / "tools/patch_mode_pacing.py", "--staged", ROOT / "build/mobile-semantics",
+        "--receipt", build / "mode_pacing.json")
+    # Also a staged fix: it repairs the shipped all-zero `Pve` timeline and
+    # re-pins the two competitive digests the loader enforces.
+    run(python, "-B", ROOT / "tools/patch_pve_timeline.py", "--staged", ROOT / "build/mobile-semantics",
+        "--receipt", build / "pve_timeline.json")
     run(python, "-B", ROOT / "tools/export_models.py", *(["--force"] if args.export_models else []))
     run(python, "-B", ROOT / "tools/package_runtime_update.py")
 

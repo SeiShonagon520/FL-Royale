@@ -76,17 +76,28 @@ void install_local_command_accounting(std::uintptr_t base) {
 }
 
 void normalize_local_touch_command(void* controller,void** owner) {
-  if(!g_local_running.load() || controller!=g_cold_scene_controller || !owner || !*owner ||
+  if(!g_local_running.load() || controller!=g_cold_scene_controller || !owner ||
+     !process_range_is_readable(owner,sizeof(void*)) || !*owner) return;
+  if(!process_range_is_readable(controller,0x98) ||
      read_object_field<void*>(controller,0x90)!=g_local_native_manager) return;
   void* command=*owner;
+  if(!process_range_is_readable(command,0x60)) return;
+  if(!g_local_native_manager || !process_range_is_readable(g_local_native_manager,0x40)) return;
   void* queue=read_object_field<void*>(g_local_native_manager,0x38);
+  if(!queue || !process_range_is_readable(queue,0x20)) return;
   const int count=read_object_field<int>(queue,0x14);
+  if(count<=0) return;
+  const int inspect_count=count<128?count:128;
   auto items=read_object_field<void**>(queue,8);
+  if(!items || !process_range_is_readable(items,inspect_count*sizeof(void*))) return;
   bool queued=false;
-  for(int index=0; index<count && index<128; ++index) if(items[index]==command) queued=true;
+  for(int index=0; index<inspect_count; ++index) if(items[index]==command) { queued=true; break; }
   if(!queued) return;
   auto table=read_object_field<void**>(command,0);
-  const int kind=reinterpret_cast<int(*)(void*)>(table[0x20/8])(command);
+  if(!table || !process_range_is_readable(table,0x28)) return;
+  void* fn=table[0x20/8];
+  if(!fn) return;
+  const int kind=reinterpret_cast<int(*)(void*)>(fn)(command);
   if(kind!=86 && kind!=2) return;
   const int tick=g_game_state_tick(g_local_native_manager);
   // Preserve the stock twenty-tick (one-second) boundary for both human
@@ -153,6 +164,9 @@ std::string current_local_deck_json() {
 
 void process_local_scene_requests() {
   if(g_local_home_requested.exchange(false)) {
+    pthread_mutex_lock(&g_control_mutex);
+    clear_scheduled_replay_actions_locked();
+    pthread_mutex_unlock(&g_control_mutex);
     g_local_running.store(false);
     g_local_native_manager=nullptr;
     g_cold_scene_manager=nullptr;
@@ -233,6 +247,14 @@ void process_local_scene_requests() {
     g_local_frames.clear(); g_local_commands.clear(); g_local_result_shown=false; g_local_last_capture=-1;
     g_local_terminal_tick.store(-1,std::memory_order_release);
   }
+  pthread_mutex_lock(&g_control_mutex);
+  clear_scheduled_replay_actions_locked();
+  pthread_mutex_unlock(&g_control_mutex);
+  // Arm the towerless arena for this battle only if the fixture says so. The
+  // marker is written by `mobile_fair.create_match` for a single-sided PvE
+  // match and is absent for every other mode, so a duel or a 2v2 keeps its six
+  // towers exactly as before.
+  g_pve_towerless_pending.store(pve_towerless_fixture_requested(fixture.c_str()),std::memory_order_release);
   void* parsed=parse_json_text(fixture.c_str());
   bool ok=start_cold_player_scene(parsed,g_game_state_context_a(),g_game_state_context_b());
   release_json_object(parsed);
